@@ -1,0 +1,90 @@
+.jstart-content-view {
+	position: fixed;
+	z-index: 999999;
+	top: 0;
+	left: 0;
+	width: 100vw;
+	height: 100vh;
+	background: rgba(0, 0, 0, .7);
+	-webkit-backdrop-filter: blur(30px);
+	backdrop-filter: blur(30px);
+	font-size: 14px;
+	display: none;
+}
+
+.jstart-content-view > .j-search-view {
+	display: flex;
+    z-index: 3;
+    height: 44px;
+    border: 1px solid #5f6368;
+    box-shadow: none;
+    border-radius: 4px;
+    margin: 40vh auto auto auto;
+    width: calc(632px + 6px);
+    width: auto;
+    max-width: 584px;
+}
+
+.jstart-content-view > .j-search-view > .j-search-content {
+	/* 搜索框 */
+	flex: 1;
+    display: flex;
+    padding: 5px 14px 0 14px;
+}
+
+.jstart-content-view > .j-search-view > .j-search-content >.j-search-icon-view {
+	/* 搜索框 > 搜索iconview */
+	display: flex;
+    align-items: center;
+    padding-right: 10px;
+    margin-top: -5px;
+}
+
+.jstart-content-view > .j-search-view > .j-search-content >.j-search-icon-view .j-search-icon-view-span {
+	/* 搜索框 > 搜索iconview > span */
+	margin-top: 5px;
+    color: #9aa0a6;
+	display: inline-block;
+    fill: currentColor;
+    position: relative;
+}
+
+.jstart-content-view >.j-search-view > .j-search-content >.j-search-icon-view .j-search-icon-view-span >svg {
+	/* 搜索框 > 搜索iconview > span > svg */
+	display: block;
+    height: 100%;
+    width: 100%;
+    line-height: 20px;
+    fill: currentColor;
+    font-size: 14px;
+}
+
+.j-search-content >.j-input-view {
+	/* 输入框view */
+}
+
+.j-search-content >.j-input-view >.j-input-view-input {
+	/* 输入框view */
+	text-align: left;
+    border: none;
+    box-shadow: none;
+    cursor: auto;
+    padding: 0;
+    border-radius: 0;
+    text-transform: none;
+}
+
+.j-logo-view {
+	/* 右边搜索logo */
+}
+
+.j-logo-view >.j-logo-view-div {
+	/* 右边搜索logo > div */
+}
+
+.j-logo-view >.j-logo-view-div >..j-logo-view-div-img {
+	/* 右边搜索logo > div > img */
+}
+
+
+

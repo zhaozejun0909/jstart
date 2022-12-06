@@ -1,0 +1,44 @@
+{
+    "manifest_version": 3,
+    "name": "JStart",
+    "description": "search and newtab page",
+    "version": "1.0.0",
+    "background": {
+        "service_worker": "/background.js",
+        "type": "module"
+    },
+    "action": {
+        "default_title": "显示jstart页面",
+        "default_icon": {            
+            "32": "logo.png" 
+        }
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "jquery-3.6.1.slim.min.js",
+                "/content.js"
+            ],
+            "css": ["jstart.css"]
+        }
+    ],
+    "chrome_url_overrides" : {
+        "newtab": "newtab.html"
+    },
+    "permissions": [
+        "storage",
+        "tabs"
+    ],
+    "commands": {
+        "command-home": {
+            "suggested_key": {
+                "default": "Ctrl+Shift+J",
+                "mac": "Command+Shift+J"
+            },
+            "description": "加载首页快捷键"
+        }
+    }
+}
