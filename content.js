@@ -1,15 +1,20 @@
 /* eslint-disable */
-console.log('hello world content todo something~')
+// console.log('hello world content todo something~')
 
+let jStrartActived = false // 激活状态：页面是否显示 
 let jStartSearchType = 'google'; // baidu google
 let tabStart = false
 
 // 监听按钮点击 或者快捷键
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    console.log("content.js Received request: ", message, sender);
-    if (message) {
+    // console.log("content.js Received request: ", message, sender);
+    if (message === 'showStartPage') {
       showMainView(message);
-    } 
+    } else if (message === 'openResultInNewTab') {
+      if (jStrartActived) {
+        handleResult('goResultNewTab', getInputValue())
+      }
+    }
     sendResponse(true)
     return true
 });
@@ -28,7 +33,7 @@ function insertHTML() {
     const div = document.createElement("div")
     document.body.appendChild(div);
     div.outerHTML = getstr()
-
+    jStrartActived = true
     // 渐入动画
     if (tabStart) {
         $("#jstart-content-view").prop("style").display = 'block'
@@ -44,20 +49,7 @@ function insertHTML() {
     inputE.keydown(function(e){
       // console.log(e.keyCode + ' 按键被按下')
       if (e && e.keyCode === 13) { // enter键
-        if (getInputValue().length === 0) {
-          // 直接回车会打开对应的搜索平台
-          if (jStartSearchType === 'google') {
-            location.assign(`https://www.google.com/search`)
-          } else {
-            location.assign(`https://www.baidu.com/`)
-          }
-          return
-        }
-        if (jStartSearchType === 'google') {
-          location.assign(`https://www.google.com/search?q=${encodeURIComponent(getInputValue())}`)
-        } else {
-          location.assign(`https://www.baidu.com/s?ie=UTF-8&wd=${encodeURIComponent(getInputValue())}`)
-        }
+        handleResult('goResult', getInputValue())
       } else if (e.keyCode === 27) { // ESC键
         removeHTML()
       } else if (e.keyCode === 9) { // tab键
@@ -78,17 +70,45 @@ function insertHTML() {
     document.getElementById("j-input-view-input").oninput = debounce(onInputChange, 400)
 }
 
+// 触发搜索点击事件
+function handleResult(type, value) {
+  if (type === 'goResultNewTab' || type === 'goResult') {
+    let goUrl = ''
+    if (value.length === 0) {
+      // 直接回车会打开对应的搜索平台
+      if (jStartSearchType === 'google') {
+        goUrl = `https://www.google.com/search`
+      } else {
+        goUrl = `https://www.baidu.com/`
+      }
+    } else {
+      if (jStartSearchType === 'google') {
+        goUrl = `https://www.google.com/search?q=${encodeURIComponent(value)}`
+      } else {
+        goUrl = `https://www.baidu.com/s?ie=UTF-8&wd=${encodeURIComponent(value)}`
+      }
+    }
+    if (type === 'goResult') {
+      location.assign(goUrl)
+    } else {
+      window.open(goUrl, '_blank')
+      removeHTML()
+    } 
+  }
+}
+
 function removeHTML() {
   console.log('jstart 退出 ~')
   const div = document.getElementById("jstart-content-view")
   if (div) {
     div.remove()
+    jStrartActived = false
   }
 }
 
 // 切换搜索平台
 function changeSearchType(event){
-  console.log('dianjile logo ')
+  // console.log('dianjile logo ')
   jStartSearchType = (jStartSearchType === 'google') ? 'baidu' : 'google'
   chrome.storage.local.set({"jStartSearchType": jStartSearchType}, function() {});
   refreshLogo()
@@ -126,10 +146,10 @@ function onInputChange(e) {
     } 
     const sendDic = {type: jStartSearchType, searchWord: text}
     chrome.runtime.sendMessage(chrome.runtime.id, sendDic).then((response) => {
-        console.log('content.js sendMessage back:', response)
+        // console.log('content.js sendMessage back:', response)
         if (typeof response === 'string') {
             const gogleData = window.DOMParser().parseFromString(response, "text/xml")
-            console.log(googleLogo)
+            // console.log(googleLogo)
         } else {
 
         }

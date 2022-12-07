@@ -22,7 +22,9 @@
                 "jquery-3.6.1.slim.min.js",
                 "/content.js"
             ],
-            "css": ["jstart.css"]
+            "css": [
+                "jstart.css"
+            ]
         }
     ],
     "chrome_url_overrides" : {
@@ -36,9 +38,16 @@
         "command-home": {
             "suggested_key": {
                 "default": "Ctrl+Shift+J",
-                "mac": "Command+Shift+J"
+                "mac": "Ctrl+J"
             },
             "description": "加载首页快捷键"
+        },
+        "command-openinnewtab": {
+            "suggested_key": {
+                "default": "Ctrl+N",
+                "mac": "Ctrl+N"
+            },
+            "description": "在新的tab页面打开搜索结果"
         }
     }
 }

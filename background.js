@@ -3,9 +3,13 @@ console.log('hello world background todo something~')
 
 // 快捷键
 chrome.commands.onCommand.addListener((command) => {
-    // console.log(`Command: ${command}`);
+    console.log(`Command: ${command}`);
     // 发送消息通知content.js 显示首页
-    toShowJstartPage()
+    if (command === 'command-home') {
+        toShowJstartPage()
+    } else if (command === 'command-openinnewtab') {
+        toOpenResultInNewTab()
+    }
 });
 
 // 点击插件icon
@@ -62,5 +66,9 @@ function sendMessageToContentJS(resultText) {
 }
 
 function toShowJstartPage() {
-    sendMessageToContentJS('start page goto show')
+    sendMessageToContentJS('showStartPage')
+}
+
+function toOpenResultInNewTab() {
+    sendMessageToContentJS('openResultInNewTab')
 }
