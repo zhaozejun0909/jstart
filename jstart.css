@@ -14,12 +14,13 @@
 
 .jstart-content-view > .j-search-view {
 	display: flex;
+    flex-wrap: wrap;
     z-index: 3;
-    height: 44px;
+    min-height: 44px;
     border: 1px solid #5f6368;
     box-shadow: none;
     border-radius: 4px;
-    margin: 40vh auto auto auto;
+    margin: 35vh auto auto auto;
     width: calc(632px + 6px);
     width: auto;
     max-width: 584px;
@@ -29,7 +30,9 @@
 	/* 搜索框 */
 	flex: 1;
     display: flex;
+    flex-wrap: wrap;
     padding: 5px 14px 0 14px;
+    height: 44px;
 }
 
 .jstart-content-view > .j-search-view > .j-search-content >.j-search-icon-view {
@@ -87,4 +90,34 @@
 }
 
 
+.j-search-view >.jstart-suggest-view {
+    width: 100%;
+    text-align: left;
+    color: aliceblue;
+    font-size: 14px;
+}
 
+.j-search-view >.jstart-suggest-view >.jstart-suggest-view-line {
+    height: 10px;
+    margin: 0 13px;
+    border-top: 1px solid #5f6368;
+    opacity: 0.5;
+}
+
+.j-search-view >.jstart-suggest-view >li {
+    height: 40px;
+    line-height: 40px;
+    border-radius: 3px; 
+    overflow: hidden;
+    list-style-type:none;
+    margin: 0 10px;
+    padding: 0 5px;
+}
+
+.j-search-view >.jstart-suggest-view >li:hover {
+    background-color: rgba(0, 0, 0, .3);
+}
+
+.j-search-view >.jstart-suggest-view >li.jstart-selected {
+    background-color: rgba(0, 0, 0, .3);
+}

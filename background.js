@@ -1,6 +1,8 @@
 /* eslint-disable */
 console.log('hello world background todo something~')
 
+let jstartCurrentSeachKeyword = ''
+
 // 快捷键
 chrome.commands.onCommand.addListener((command) => {
     console.log(`Command: ${command}`);
@@ -26,6 +28,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request && request['searchWord']) {
         requestSearch(request['searchWord'], request['type'], (result) => {
             console.log('send', result)
+            // sendResponse 貌似只支持同步回调，我试了异步是无法回调回去的
             // sendResponse(JSON.stringify(result))
         })
     }
@@ -34,6 +37,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // 请求接口
 function requestSearch(text, type='baidu', callback) {
+    if (!text) return
+    jstartCurrentSeachKeyword = text
     if (type === 'baidu') {
         fetch(`https://www.baidu.com/sugrec?pre=1&p=3&json=1&prod=pc&from=pc_web&wd=${text}&csor=2&pwd=a`, {
             "headers": {
@@ -47,19 +52,23 @@ function requestSearch(text, type='baidu', callback) {
             }
         }).then(data => {
             callback(data)
+            sendMessageToContentJS({type: 'baidu', data: data})
         })
     } else if (type === 'google') {
         fetch(`http://suggestqueries.google.com/complete/search?output=toolbar&hl=zh&q=${text}`).then(response => {
             return response.text()
-        }).then(str => callback(str))
+        }).then(str => {
+            callback(str)
+            sendMessageToContentJS({type: 'google', data: str})
+        })
     }
 }
 
-function sendMessageToContentJS(resultText) {
+function sendMessageToContentJS(message) {
     let queryOptions = { active: true };
     chrome.tabs.query(queryOptions).then(tabs => {
         let activeTab = tabs && tabs.length>0 && tabs[tabs.length-1]
-        chrome.tabs.sendMessage(activeTab.id, resultText).then((response) => {
+        chrome.tabs.sendMessage(activeTab.id, message).then((response) => {
             // console.log("Received response: ", response);
         });
     })

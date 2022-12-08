@@ -3,7 +3,10 @@
 
 let jStrartActived = false // 激活状态：页面是否显示 
 let jStartSearchType = 'google'; // baidu google
-let tabStart = false
+let jStarttabStart = false
+let jStartCommandKeyDown = false
+let jStartSuggestList = []
+let jStartSuggestSelectedIndex = -1 // 选中的推荐index
 
 // 监听按钮点击 或者快捷键
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -13,6 +16,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } else if (message === 'openResultInNewTab') {
       if (jStrartActived) {
         handleResult('goResultNewTab', getInputValue())
+      }
+    } else {
+      // 搜索结果回调
+      // console.log(message)
+      if (message && message['type']) {
+        handleSeachResult(message)   
       }
     }
     sendResponse(true)
@@ -35,7 +44,7 @@ function insertHTML() {
     div.outerHTML = getstr()
     jStrartActived = true
     // 渐入动画
-    if (tabStart) {
+    if (jStarttabStart) {
         $("#jstart-content-view").prop("style").display = 'block'
     } else {
         $("#jstart-content-view").fadeIn(300, function(){
@@ -46,14 +55,33 @@ function insertHTML() {
     focusOnSearch()
     // 搜索事件 
     let inputE = $("#j-input-view-input")
+    inputE.keyup(function(e) {
+      // console.log(e.keyCode + ' 按键被松开')
+      if (e && e.keyCode === 91) { // Command 键
+        // 用于 Commond + Enter 快捷键
+        jStartCommandKeyDown = false
+      }
+    })
     inputE.keydown(function(e){
       // console.log(e.keyCode + ' 按键被按下')
       if (e && e.keyCode === 13) { // enter键
-        handleResult('goResult', getInputValue())
+        const suggestContent = getSuggestSelected()
+        const seachWord = suggestContent || getInputValue()
+        const openType = jStartCommandKeyDown ? 'goResultNewTab' : 'goResult'
+        handleResult(openType, seachWord)
+        e.preventDefault();
       } else if (e.keyCode === 27) { // ESC键
         removeHTML()
+        e.preventDefault();
       } else if (e.keyCode === 9) { // tab键
-        changeSearchType()
+        if (jStartSuggestList.length) changeSuggestResult('next')
+        else changeSearchType()
+        e.preventDefault();
+      } else if (e && e.keyCode === 91) { // Command 键
+        // 用于 Commond + Enter 快捷键
+        jStartCommandKeyDown = true
+      } else if (e && (e.keyCode === 40 || e.keyCode === 38)) { // 下 方向键
+        changeSuggestResult(e.keyCode)
         e.preventDefault();
       }
     })
@@ -67,7 +95,7 @@ function insertHTML() {
     });
     $(".j-logo-view-div-img").click(changeSearchType)
 
-    document.getElementById("j-input-view-input").oninput = debounce(onInputChange, 400)
+    document.getElementById("j-input-view-input").oninput = debounce(onInputChange, 200)
 }
 
 // 触发搜索点击事件
@@ -106,6 +134,105 @@ function removeHTML() {
   }
 }
 
+// 接收到搜索联想关键词请求
+function handleSeachResult(result) {
+  if (!result['type'] || !result['data']) return
+  const type = result['type']
+  const data = result['data']
+  
+  if (type === 'baidu') {
+    try {
+      const dataObj = data
+      let list = dataObj['g']
+      list.forEach(item => {
+         item.type = type
+      })
+      showSuggest(list)
+    } catch (error) {}
+  } else if (type === 'google'){
+    try {
+      const xmlData = $.parseXML(data)
+      const xmlDom = $(xmlData)
+      const elementlist = xmlDom.find( "suggestion" );
+      const list = []
+      elementlist.each((index, element) => {
+        const content = $(element).attr('data');
+        if (content) {
+          list.push({type: type, q: content})
+        }
+      })
+      showSuggest(list)
+    } catch (error) {}
+  }
+}
+
+// 显示搜索结果
+function showSuggest(list) {
+  // console.log("🚀 ~ file: content.js:147 ~ showSuggest ~ list", list)
+  if (!list) return
+  removeSuggest()
+  if (list.length === 0) return
+  jStartSuggestList = list
+  // 显示输入联想
+  let suggestHtml = $(`<div class="jstart-suggest-view" id="jstart-suggest-view"></div>`) 
+  $(suggestHtml).append(`<div class="jstart-suggest-view-line"></div>`)
+  list.forEach((item, index) => {
+    let liHtml = $(`<li class="jstart-suggest-view-item">${item.q}</li>`)
+    $(liHtml).click(function(){
+      suggestClick(index)
+    })
+    $(suggestHtml).append(liHtml)
+    // suggestHtml.appendChild(liHtml)
+  })
+  $("#j-search-view").append(suggestHtml)
+}
+
+// 隐藏联想view
+function removeSuggest() {
+  jStartSuggestSelectedIndex = -1
+  jStartSuggestList = []
+  $("#jstart-suggest-view").remove()
+}
+
+// 获取当前的suggest选中结果
+function getSuggestSelected() {
+  if (!$("#jstart-suggest-view")) return null
+  if (jStartSuggestSelectedIndex < 0) return null
+  return jStartSuggestList[jStartSuggestSelectedIndex]['q']
+}
+
+// 点击suggest 
+function suggestClick(index) {
+  jStartSuggestSelectedIndex = index 
+  const suggestContent = getSuggestSelected()
+  handleResult('goResult', suggestContent)
+}
+
+// 切换搜索结果
+function changeSuggestResult(keyCode) {
+  if (!$("#jstart-suggest-view")) return
+  const upKey = keyCode == 38
+  if (upKey) {
+    if (jStartSuggestSelectedIndex > 0) jStartSuggestSelectedIndex --
+    else jStartSuggestSelectedIndex = jStartSuggestList.length - 1
+  } else {
+    if (jStartSuggestList.length > jStartSuggestSelectedIndex + 1) jStartSuggestSelectedIndex ++
+    else jStartSuggestSelectedIndex = 0
+  }
+  refreshSuggestHilight()
+}
+
+// 刷新高亮状态
+function refreshSuggestHilight() {
+  $(".jstart-suggest-view-item").each((index, ele) => {
+    if (index === jStartSuggestSelectedIndex) {
+      $(ele).addClass('jstart-selected')
+    } else {
+      $(ele).removeClass('jstart-selected')
+    }
+  })
+}
+
 // 切换搜索平台
 function changeSearchType(event){
   // console.log('dianjile logo ')
@@ -114,6 +241,7 @@ function changeSearchType(event){
   refreshLogo()
   focusOnSearch()
     // event.stopPropagation()
+  onInputChange() // 触发搜索关键词请求
 }
 
 // 获取输入内容
@@ -142,17 +270,11 @@ function focusOnSearch() {
 function onInputChange(e) {
     const text = getInputValue()
     if (!text) { 
+      showSuggest([]) // 清空联想词显示
         return
     } 
     const sendDic = {type: jStartSearchType, searchWord: text}
     chrome.runtime.sendMessage(chrome.runtime.id, sendDic).then((response) => {
-        // console.log('content.js sendMessage back:', response)
-        if (typeof response === 'string') {
-            const gogleData = window.DOMParser().parseFromString(response, "text/xml")
-            // console.log(googleLogo)
-        } else {
-
-        }
     });
 }
 
@@ -172,8 +294,8 @@ function debounce (callback, delay = 800) {
 function getstr() {
   return `
     <div id="jstart-content-view" class="jstart-content-view" >
-      <div class="j-search-view">
-          <div class="j-search-content">
+      <div class="j-search-view" id="j-search-view">
+          <div class="j-search-content" id="j-search-content">
 
               <div class="j-search-icon-view">
                   <div class="j-search-icon-view-span-view">
@@ -211,8 +333,8 @@ function getstr() {
 
 // newTab 逻辑
 const envMeta = document.getElementsByTagName('meta')['newtab-jstart-flag']
-tabStart = envMeta && envMeta.content && envMeta.content === 'true'
-if (tabStart) {
+jStarttabStart = envMeta && envMeta.content && envMeta.content === 'true'
+if (jStarttabStart) {
     console.log('content js ： new tab start ~~')
     $(document).ready(function(){
         showMainView()    
