@@ -4,154 +4,170 @@
     height: 100vh;
     position: absolute;
     -webkit-transform: translateX(-30vw) rotate(-15deg);
-            transform: translateX(-30vw) rotate(-15deg);
-            animation: fadein 2s linear 1;
+    transform: translateX(-30vw) rotate(-15deg);
+    animation: fadein 2s linear 1;
     will-change: transform;
-  }
+}
 
-  .curveWrap .curve {
+.curveWrap .curve {
     stroke-linecap: round;
     stroke-opacity: 1;
-  }
-  .curveWrap .curve path {
+}
+
+.curveWrap .curve path {
     -webkit-transform-origin: center;
-            transform-origin: center;
-  }
+    transform-origin: center;
+}
 
-  .curveWrap .curve path:nth-child(6n + 1) {
+.curveWrap .curve path:nth-child(6n + 1) {
     stroke: cadetblue;
-  }
-  .curveWrap .curve path:nth-child(6n + 2) {
-    stroke: cornflowerBlue;
-  }
-  .curveWrap .curve path:nth-child(6n + 3) {
-    stroke: Yellow;
-  }
-  .curveWrap .curve path:nth-child(6n + 4) {
-    stroke: cyan;
-  }
-  .curveWrap .curve path:nth-child(6n + 5) {
-    stroke: darkorange;
-  }
-  .curveWrap .curve path:nth-child(6n + 6) {
-    stroke: white;
-  }
+}
 
-  .curveWrap .curve path:nth-child(1) {
+.curveWrap .curve path:nth-child(6n + 2) {
+    stroke: cornflowerBlue;
+}
+
+.curveWrap .curve path:nth-child(6n + 3) {
+    stroke: Yellow;
+}
+
+.curveWrap .curve path:nth-child(6n + 4) {
+    stroke: cyan;
+}
+
+.curveWrap .curve path:nth-child(6n + 5) {
+    stroke: darkorange;
+}
+
+.curveWrap .curve path:nth-child(6n + 6) {
+    stroke: white;
+}
+
+.curveWrap .curve path:nth-child(1) {
     stroke-width: 29;
     -webkit-animation: curve 35s linear infinite;
-            animation: curve 35s linear infinite;
-  }
+    animation: curve 35s linear infinite;
+}
 
-  .curveWrap .curve path:nth-child(2) {
+.curveWrap .curve path:nth-child(2) {
     stroke-width: 27;
     -webkit-animation: curve1 35s linear infinite;
-            animation: curve1 35s linear infinite;
-  }
+    animation: curve1 35s linear infinite;
+}
 
-  .curveWrap .curve path:nth-child(3) {
+.curveWrap .curve path:nth-child(3) {
     stroke-width: 22;
     -webkit-animation: curve2 35s linear infinite;
-            animation: curve2 35s linear infinite;
-  }
+    animation: curve2 35s linear infinite;
+}
 
-  .curveWrap .curve path:nth-child(4) {
+.curveWrap .curve path:nth-child(4) {
     stroke-width: 20;
     -webkit-animation: curve2 35s linear infinite;
-            animation: curve2 35s linear infinite;
-  }
+    animation: curve2 35s linear infinite;
+}
 
-  .curveWrap .curve path:nth-child(5) {
+.curveWrap .curve path:nth-child(5) {
     stroke-width: 18;
     -webkit-animation: curve1 35s linear infinite;
-            animation: curve1 35s linear infinite;
-  }
+    animation: curve1 35s linear infinite;
+}
 
-  .curveWrap .curve path:nth-child(6) {
+.curveWrap .curve path:nth-child(6) {
     stroke-width: 19;
     -webkit-animation: curve 35s linear infinite;
-            animation: curve 35s linear infinite;
-  }
+    animation: curve 35s linear infinite;
+}
 
-  @keyframes curve {
+@keyframes curve {
     0% {
-      -webkit-transform: rotateX(180deg) scaley(1) skewY(4deg);
-              transform: rotateX(180deg) scaley(1) skewY(4deg);
-      stroke-opacity: 1;
+        -webkit-transform: rotateX(180deg) scaley(1) skewY(4deg);
+        transform: rotateX(180deg) scaley(1) skewY(4deg);
+        stroke-opacity: 1;
     }
+
     25% {
-      -webkit-transform: rotateX(360deg) scaley(1) skewY(8deg);
-              transform: rotateX(360deg) scaley(1) skewY(8deg);
-      stroke-opacity: 0.5;
+        -webkit-transform: rotateX(360deg) scaley(1) skewY(8deg);
+        transform: rotateX(360deg) scaley(1) skewY(8deg);
+        stroke-opacity: 0.5;
     }
+
     50% {
         -webkit-transform: rotateX(180deg) scaley(1) skewY(4deg);
-              transform: rotateX(180deg) scaley(1) skewY(4deg);
+        transform: rotateX(180deg) scaley(1) skewY(4deg);
         stroke-opacity: 1;
     }
+
     75% {
-      -webkit-transform: rotateX(0deg) scaley(1) skewY(0deg);
-              transform: rotateX(0deg) scaley(1) skewY(0deg);
-      stroke-opacity: 1;
-    }
-    100% {
-        -webkit-transform: rotateX(180deg) scaley(1) skewY(4deg);
-                transform: rotateX(180deg) scaley(1) skewY(4deg);
+        -webkit-transform: rotateX(0deg) scaley(1) skewY(0deg);
+        transform: rotateX(0deg) scaley(1) skewY(0deg);
         stroke-opacity: 1;
     }
-  }
-  @keyframes curve2 {
-    0% {
-      -webkit-transform: rotateX(360deg) scaley(1) skewY(0deg);
-              transform: rotateX(360deg) scaley(1) skewY(0deg);
-      stroke-opacity: 1;
-    }
-    50% {
-      -webkit-transform: rotateX(0deg) scaley(1) skewY(8deg);
-              transform: rotateX(0deg) scaley(1) skewY(8deg);
-      stroke-opacity: 0.5;
-    }
-    100% {
-      -webkit-transform: rotateX(360deg) scaley(1) skewY(0deg);
-              transform: rotateX(360deg) scaley(1) skewY(0deg);
-      stroke-opacity: 1;
-    }
-  }
 
-  @keyframes curve2 {
-    0% {
-      -webkit-transform: rotateX(0deg) scaley(1) skewY(8deg);
-              transform: rotateX(0deg) scaley(1) skewY(8deg);
-      stroke-opacity: 1;
-    }
-    50% {
-      -webkit-transform: rotateX(360deg) scaley(1) skewY(0deg);
-              transform: rotateX(36deg) scaley(1) skewY(0deg);
-      stroke-opacity: 0.5;
-    }
     100% {
-      -webkit-transform: rotateX(0deg) scaley(1) skewY(8deg);
-              transform: rotateX(0deg) scaley(1) skewY(8deg);
-      stroke-opacity: 1;
+        -webkit-transform: rotateX(180deg) scaley(1) skewY(4deg);
+        transform: rotateX(180deg) scaley(1) skewY(4deg);
+        stroke-opacity: 1;
     }
-  }
+}
 
-  @keyframes fadein {
+@keyframes curve2 {
+    0% {
+        -webkit-transform: rotateX(360deg) scaley(1) skewY(0deg);
+        transform: rotateX(360deg) scaley(1) skewY(0deg);
+        stroke-opacity: 1;
+    }
+
+    50% {
+        -webkit-transform: rotateX(0deg) scaley(1) skewY(8deg);
+        transform: rotateX(0deg) scaley(1) skewY(8deg);
+        stroke-opacity: 0.5;
+    }
+
+    100% {
+        -webkit-transform: rotateX(360deg) scaley(1) skewY(0deg);
+        transform: rotateX(360deg) scaley(1) skewY(0deg);
+        stroke-opacity: 1;
+    }
+}
+
+@keyframes curve2 {
+    0% {
+        -webkit-transform: rotateX(0deg) scaley(1) skewY(8deg);
+        transform: rotateX(0deg) scaley(1) skewY(8deg);
+        stroke-opacity: 1;
+    }
+
+    50% {
+        -webkit-transform: rotateX(360deg) scaley(1) skewY(0deg);
+        transform: rotateX(36deg) scaley(1) skewY(0deg);
+        stroke-opacity: 0.5;
+    }
+
+    100% {
+        -webkit-transform: rotateX(0deg) scaley(1) skewY(8deg);
+        transform: rotateX(0deg) scaley(1) skewY(8deg);
+        stroke-opacity: 1;
+    }
+}
+
+@keyframes fadein {
     0% {
         stroke-opacity: 0.2;
-      }
-      100% {
-        stroke-opacity: 0.5;
-      }
-  }
+    }
 
-  html,
-  body {
+    100% {
+        stroke-opacity: 0.5;
+    }
+}
+
+html,
+body {
     height: 100vh;
-  }
-  
-  body {
+}
+
+body {
     background: radial-gradient(rgb(191, 189, 189), #000);
     background-repeat: no-repeat;
     overflow: hidden;
-  }
+}

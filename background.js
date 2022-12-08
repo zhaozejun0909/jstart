@@ -36,7 +36,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 })
 
 // 请求接口
-function requestSearch(text, type='baidu', callback) {
+function requestSearch(text, type = 'baidu', callback) {
     if (!text) return
     jstartCurrentSeachKeyword = text
     if (type === 'baidu') {
@@ -52,14 +52,14 @@ function requestSearch(text, type='baidu', callback) {
             }
         }).then(data => {
             callback(data)
-            sendMessageToContentJS({type: 'baidu', data: data})
+            sendMessageToContentJS({ type: 'baidu', data: data })
         })
     } else if (type === 'google') {
         fetch(`http://suggestqueries.google.com/complete/search?output=toolbar&hl=zh&q=${text}`).then(response => {
             return response.text()
         }).then(str => {
             callback(str)
-            sendMessageToContentJS({type: 'google', data: str})
+            sendMessageToContentJS({ type: 'google', data: str })
         })
     }
 }
@@ -67,7 +67,7 @@ function requestSearch(text, type='baidu', callback) {
 function sendMessageToContentJS(message) {
     let queryOptions = { active: true };
     chrome.tabs.query(queryOptions).then(tabs => {
-        let activeTab = tabs && tabs.length>0 && tabs[tabs.length-1]
+        let activeTab = tabs && tabs.length > 0 && tabs[tabs.length - 1]
         chrome.tabs.sendMessage(activeTab.id, message).then((response) => {
             // console.log("Received response: ", response);
         });
@@ -76,6 +76,7 @@ function sendMessageToContentJS(message) {
 
 function toShowJstartPage() {
     sendMessageToContentJS('showStartPage')
+    // 获取书签信息
 }
 
 function toOpenResultInNewTab() {
