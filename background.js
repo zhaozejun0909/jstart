@@ -2,10 +2,11 @@
 console.log('hello world background todo something~')
 
 let jstartCurrentSeachKeyword = ''
+let jstartSavedBookmarks = []
 
 // 快捷键
 chrome.commands.onCommand.addListener((command) => {
-    console.log(`Command: ${command}`);
+    // console.log(`Command: ${command}`);
     // 发送消息通知content.js 显示首页
     if (command === 'command-home') {
         toShowJstartPage()
@@ -27,10 +28,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // console.log('background.js onMessage : ', request, sender, sendResponse)
     if (request && request['searchWord']) {
         requestSearch(request['searchWord'], request['type'], (result) => {
-            console.log('send', result)
             // sendResponse 貌似只支持同步回调，我试了异步是无法回调回去的
             // sendResponse(JSON.stringify(result))
         })
+    } else if (request && request['type'] === 'getBookmarks') {
+        sendBookmarksToContentJS()
     }
     return true
 })
@@ -75,10 +77,40 @@ function sendMessageToContentJS(message) {
 }
 
 function toShowJstartPage() {
-    sendMessageToContentJS('showStartPage')
+    sendMessageToContentJS({ type: 'jstart', data: 'showStartPage' })
     // 获取书签信息
+    sendBookmarksToContentJS()
+}
+
+// 获取书签并发送给content.js
+function sendBookmarksToContentJS() {
+    if (jstartSavedBookmarks && jstartSavedBookmarks.length > 0) {
+        sendMessageToContentJS({ type: 'bookmarks', data: jstartSavedBookmarks })
+    } else {
+        chrome.bookmarks.getTree(
+            tree => {
+                // 扁平化
+                let books = []
+                flatFromList(tree, books)
+                jstartSavedBookmarks = books
+                // console.log("🚀 ~ file: background.js:85 ~ toShowJstartPage ~ books", books)
+                sendMessageToContentJS({ type: 'bookmarks', data: books })
+            }
+        )
+    }
+}
+
+// 递归提取所有的标签
+function flatFromList(list, flatList) {
+    list.forEach(item => {
+        if (item.children && item.children.length > 0) { // 目录类型
+            flatFromList(item.children, flatList)
+        } else { // 书签类型
+            flatList.push(item)
+        }
+    }) 
 }
 
 function toOpenResultInNewTab() {
-    sendMessageToContentJS('openResultInNewTab')
+    sendMessageToContentJS({ type: 'jstart', data: 'openResultInNewTab' })
 }

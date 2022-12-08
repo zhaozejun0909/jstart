@@ -7,22 +7,26 @@ let jStarttabStart = false
 let jStartCommandKeyDown = false
 let jStartSuggestList = []
 let jStartSuggestSelectedIndex = -1 // 选中的推荐index
+let jStartBookmarks = []
 
 // 监听按钮点击 或者快捷键
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // console.log("content.js Received request: ", message, sender);
-    if (message === 'showStartPage') {
-        showMainView(message);
-    } else if (message === 'openResultInNewTab') {
-        if (jStrartActived) {
-            handleResult('goResultNewTab', getInputValue())
+    if (!message.type) return
+    if (message.type === 'jstart'){
+        if (message.data === 'showStartPage') {
+            showMainView();
+        } else if (message.data === 'openResultInNewTab') {
+            if (jStrartActived) {
+                handleResult('keyword', getInputValue(), true)
+            }
         }
-    } else {
+    } else if (message.type === 'google' || message.type === 'baidu') {
         // 搜索结果回调
-        // console.log(message)
-        if (message && message['type']) {
-            handleSeachResult(message)
-        }
+        handleSeachResult(message)
+    } else if (message.type === 'bookmarks') {
+        // 接收书签信息
+        handleBookmarks(message.data)
     }
     sendResponse(true)
     return true
@@ -66,9 +70,12 @@ function insertHTML() {
         // console.log(e.keyCode + ' 按键被按下')
         if (e && e.keyCode === 13) { // enter键
             const suggestContent = getSuggestSelected()
-            const seachWord = suggestContent || getInputValue()
-            const openType = jStartCommandKeyDown ? 'goResultNewTab' : 'goResult'
-            handleResult(openType, seachWord)
+            const newTab = jStartCommandKeyDown
+            if (suggestContent) {
+                handleResult(suggestContent.type, suggestContent.value, newTab)
+            } else {
+                handleResult('keyword', getInputValue(), newTab)
+            }
             e.preventDefault();
         } else if (e.keyCode === 27) { // ESC键
             removeHTML()
@@ -99,8 +106,8 @@ function insertHTML() {
 }
 
 // 触发搜索点击事件
-function handleResult(type, value) {
-    if (type === 'goResultNewTab' || type === 'goResult') {
+function handleResult(type, value, newTab) {
+    if (type === 'keyword') {
         let goUrl = ''
         if (value.length === 0) {
             // 直接回车会打开对应的搜索平台
@@ -115,11 +122,19 @@ function handleResult(type, value) {
             } else {
                 goUrl = `https://www.baidu.com/s?ie=UTF-8&wd=${encodeURIComponent(value)}`
             }
-        }
-        if (type === 'goResult') {
+        } 
+        if (!newTab) {
             location.assign(goUrl)
         } else {
             window.open(goUrl, '_blank')
+            removeHTML()
+        }
+    } else if (type === 'bookmark') {
+        // 保存点击记录
+        if (!newTab) {
+            location.assign(value)
+        } else {
+            window.open(value, '_blank')
             removeHTML()
         }
     }
@@ -134,12 +149,16 @@ function removeHTML() {
     }
 }
 
+// 处理书签结果
+function handleBookmarks(list) {
+    jStartBookmarks = list
+}
+
 // 接收到搜索联想关键词请求
 function handleSeachResult(result) {
     if (!result['type'] || !result['data']) return
     const type = result['type']
     const data = result['data']
-
     if (type === 'baidu') {
         try {
             const dataObj = data
@@ -169,6 +188,8 @@ function handleSeachResult(result) {
 // 显示搜索结果
 function showSuggest(list) {
     // console.log("🚀 ~ file: content.js:147 ~ showSuggest ~ list", list)
+    let booksMatch = addBookmarksInSuggest() // 匹配书签
+    list = booksMatch.concat(list)
     if (!list) return
     removeSuggest()
     if (list.length === 0) return
@@ -187,6 +208,27 @@ function showSuggest(list) {
     $("#j-search-view").append(suggestHtml)
 }
 
+// 匹配书签
+function addBookmarksInSuggest() {
+    let currentInput = getInputValue()
+    if (!currentInput) return
+    if (currentInput === '/' || currentInput === '、') { // 搜索书签快捷键
+        list = []
+        // 加载历史记录，按常用排序
+
+    } else if (currentInput.length > 1) {
+        let targetBookmarks = jStartBookmarks.filter(bookmark => bookmark['title'].includes(currentInput))
+        if (targetBookmarks.length > 3) targetBookmarks = [targetBookmarks[0], targetBookmarks[1], targetBookmarks[3]] // 最多三个
+        targetBookmarks.map(item => {
+            item['type'] = 'bookmark'
+            item['q'] = item.title
+            return item
+        })
+        return targetBookmarks
+    }
+    return []
+}
+
 // 隐藏联想view
 function removeSuggest() {
     jStartSuggestSelectedIndex = -1
@@ -198,14 +240,23 @@ function removeSuggest() {
 function getSuggestSelected() {
     if (!$("#jstart-suggest-view")) return null
     if (jStartSuggestSelectedIndex < 0) return null
-    return jStartSuggestList[jStartSuggestSelectedIndex]['q']
+    let item = jStartSuggestList[jStartSuggestSelectedIndex]
+    if (item.type === 'bookmark') {
+        return {type: item.type, value: item.url}
+    } else {
+        return {type: 'keyword', value: item.q}
+    }
 }
 
 // 点击suggest 
 function suggestClick(index) {
     jStartSuggestSelectedIndex = index
+    suggestJump()
+}
+
+function suggestJump() {
     const suggestContent = getSuggestSelected()
-    handleResult('goResult', suggestContent)
+    handleResult(suggestContent.type, suggestContent.value)
 }
 
 // 切换搜索结果
@@ -338,6 +389,10 @@ if (jStarttabStart) {
     console.log('content js ： new tab start ~~')
     $(document).ready(function () {
         showMainView()
+        // 向background.js请求书签信息
+        const sendDic = { type: 'getBookmarks' }
+        chrome.runtime.sendMessage(chrome.runtime.id, sendDic).then((response) => {
+        });
     });
     window.onload = function () {
         if (location.search !== "?x") { // 自动获得焦点
