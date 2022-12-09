@@ -75,6 +75,8 @@
     padding: 0;
     border-radius: 0;
     text-transform: none;
+    color: #e8eaed;
+    font-size: 16px;
 }
 
 .j-logo-view {
@@ -112,12 +114,24 @@
     list-style-type:none;
     margin: 0 10px;
     padding: 0 5px;
+    color: #e8eaed;
+    font-size: 14px;
+    font-weight: normal;
 }
 
-.j-search-view >.jstart-suggest-view >li:hover {
+.j-search-view >.jstart-suggest-view >li.jstart-hover:hover {
     background-color: rgba(0, 0, 0, .3);
+    color: antiquewhite;
 }
 
 .j-search-view >.jstart-suggest-view >li.jstart-selected {
     background-color: rgba(0, 0, 0, .3);
+    color: antiquewhite;
+}
+
+.j-search-view >.jstart-suggest-view >li >.jstart-type-icon {
+    width: 26px;
+    height: 26px;
+    float: right;
+    margin-top: 7px;
 }

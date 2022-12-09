@@ -8,6 +8,14 @@ let jStartCommandKeyDown = false
 let jStartSuggestList = []
 let jStartSuggestSelectedIndex = -1 // 选中的推荐index
 let jStartBookmarks = []
+const jStartBrowserPage = [
+    // chrome 不支持通过js跳转浏览器页面，暂时注释掉了
+    // {type: 'browserpage', q: 'history chrome 历史记录', url: 'chrome://history/'},
+    // {type: 'browserpage', q: 'setting chrome 设置', url: 'chrome://settings/'},
+    // {type: 'browserpage', q: 'extensions chrome 扩展插件', url: 'chrome://extensions/'},
+    // {type: 'browserpage', q: 'downloads chrome 下载', url: 'chrome://downloads/'},
+    // {type: 'browserpage', q: 'bookmarks chrome 书签收藏', url: 'chrome://bookmarks/'},
+]
 
 // 监听按钮点击 或者快捷键
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -129,7 +137,7 @@ function handleResult(type, value, newTab) {
             window.open(goUrl, '_blank')
             removeHTML()
         }
-    } else if (type === 'bookmark') {
+    } else if (type === 'url') {
         // 保存点击记录
         if (!newTab) {
             location.assign(value)
@@ -151,7 +159,11 @@ function removeHTML() {
 
 // 处理书签结果
 function handleBookmarks(list) {
-    jStartBookmarks = list
+    jStartBookmarks = list.map(item => {
+        item['type'] = 'bookmark'
+        item['q'] = item.title
+        return item
+    })
 }
 
 // 接收到搜索联想关键词请求
@@ -188,8 +200,8 @@ function handleSeachResult(result) {
 // 显示搜索结果
 function showSuggest(list) {
     // console.log("🚀 ~ file: content.js:147 ~ showSuggest ~ list", list)
-    let booksMatch = addBookmarksInSuggest() // 匹配书签
-    list = booksMatch.concat(list)
+    let booksMatch = addBookmarksInSuggest() // 匹配书签和快捷命令
+    if (booksMatch) list = booksMatch.concat(list)
     if (!list) return
     removeSuggest()
     if (list.length === 0) return
@@ -197,36 +209,50 @@ function showSuggest(list) {
     // 显示输入联想
     let suggestHtml = $(`<div class="jstart-suggest-view" id="jstart-suggest-view"></div>`)
     $(suggestHtml).append(`<div class="jstart-suggest-view-line"></div>`)
+    $(suggestHtml).mousemove(() => { // 鼠标移动才添加 hover 效果，优化选中时机效果
+        if (!$(".jstart-suggest-view-item").hasClass("jstart-hover")) {
+            $(".jstart-suggest-view-item").addClass('jstart-hover')
+        }
+    })
     list.forEach((item, index) => {
         let liHtml = $(`<li class="jstart-suggest-view-item">${item.q}</li>`)
         $(liHtml).click(function () {
             suggestClick(index)
         })
+        if (item.type === 'bookmark') { // 添加书签icon
+            $(liHtml).append(`<img class="jstart-type-icon" alt src="data:image/svg+xml;base64,PHN2ZyB0PSIxNjcwNTUxNDA1MzQyIiBjbGFzcz0iaWNvbiIgdmlld0JveD0iMCAwIDEwMjQgMTAyNCIgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHAtaWQ9IjEzOTIiIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCI+PHBhdGggZD0iTTczNy43IDE3MS44djI5OS42QzY4OSA0MzQuNiA2NDMuOSA0MDAuNiA1OTggMzY1LjljLTQ1LjEgMzQuNi04OS43IDY4LjctMTM3LjkgMTA1LjZWMTY1LjZjLTI5LjIgMC01NS41LTAuMy04MS44IDAuMS0zMy43IDAuNS02Ny43LTEtMTAxIDIuOC00Ny4zIDUuNC04MS41IDQ1LjMtODEuNiA5Mi42LTAuNCAxNjIuMi0wLjQgMzI0LjMgMCA0ODYuNSAwLjEgNTQuNCA0Mi4xIDkzLjcgMTAwLjcgOTUuOSAxNy4yIDAuNiAzNC40IDAuMiA1MS42IDAuMSAxNS43IDAgMjUuOCA3IDI2IDIzLjMgMC4yIDE2LjItMTAuMSAyNC4yLTI1LjQgMjQuMi0yNy4xLTAuMi01NC41IDEtODEuMS0yLjktNjcuOC0xMC4yLTExOC44LTY2LjctMTE5LjQtMTM1LjctMS40LTE2NS41LTEuNi0zMzEgMC4xLTQ5Ni40IDAuOC03Ny40IDY1LjgtMTM3LjcgMTQzLjQtMTM4IDE0Mi4zLTAuNSAyODQuNi0wLjYgNDI2LjktMC41IDcwLjUgMCAxMzcuNSA2MC45IDEzOS44IDEzMS42IDIuNyA4NCAxLjEgMTY4LjEgMS4xIDI1Mi4yIDAgMTUuNi04LjMgMjUuMy0yNC41IDI0LjktMTcuNi0wLjUtMjMuNi0xMi42LTIzLjYtMjguMy0wLjItNjAuOS0wLjEtMTIxLjgtMC4xLTE4Mi43IDAtMTkuMiAwLjUtMzguNC0wLjEtNTcuNi0xLjMtNDIuMS0zMy42LTgwLjUtNzMuNC04NS45ek01OTcuOCAzMDUuMWMzMC4zIDIyLjggNTkgNDQuNCA4OS44IDY3LjZWMTY4LjlINTA5LjN2MjAzLjdjMzAuOS0yMy41IDU5LjEtNDUgODguNS02Ny41eiIgZmlsbD0iIzExOTVGRSIgcC1pZD0iMTM5MyI+PC9wYXRoPjxwYXRoIGQ9Ik02NTEuOSA3NjQuN0g0ODUuNGMtNC42IDAtOS4zIDAuMi0xMy45LTAuMS0xNS4xLTEuMS0yNS42LTguMS0yNS41LTI0LjMgMC4xLTE2LjIgMTAuNC0yMy41IDI1LjgtMjMuNyAyNy43LTAuMyA1NS41LTAuMSA4My4yLTAuMWgyNjMuNmM0LjYgMCA5LjMgMC4xIDEzLjkgMCAxNS43LTAuMSAyNS45IDcuMiAyNi4zIDIzLjEgMC41IDE3LjEtMTAuMiAyNS0yNi42IDI1LjEtNDMuNiAwLjItODcuMiAwLjEtMTMwLjggMC4xLTE2LjUtMC4xLTMzLTAuMS00OS41LTAuMXpNNjUxLjkgODkxLjZINDg1LjRjLTQuNiAwLTkuMyAwLjItMTMuOS0wLjEtMTUuMS0xLjEtMjUuNi04LjEtMjUuNS0yNC4zIDAuMS0xNi4yIDEwLjQtMjMuNSAyNS44LTIzLjcgMjcuNy0wLjMgNTUuNS0wLjEgODMuMi0wLjFoMjYzLjZjNC42IDAgOS4zIDAuMSAxMy45IDAgMTUuNy0wLjEgMjUuOSA3LjIgMjYuMyAyMy4xIDAuNSAxNy4xLTEwLjIgMjUtMjYuNiAyNS4xLTQzLjYgMC4yLTg3LjIgMC4xLTEzMC44IDAuMS0xNi41LTAuMS0zMy0wLjEtNDkuNS0wLjF6TTY1Mi4zIDYzOC4zYy01OC4yIDAtMTE2LjMgMC4xLTE3NC41IDAtMjEuNSAwLTMyLjEtOC0zMi4xLTIzLjUgMC0xNS45IDEwLjUtMjQuNyAzMS41LTI0LjcgMTE3LTAuMiAyMzMuOS0wLjIgMzUwLjkgMCAyMC42IDAgMzEuOSA5LjMgMzAuOCAyNS4xLTEuMyAxOC42LTEzLjQgMjMuNC0zMC4yIDIzLjMtNTguNy0wLjUtMTE3LjUtMC4yLTE3Ni40LTAuMnoiIGZpbGw9IiMxMTk1RkUiIHAtaWQ9IjEzOTQiPjwvcGF0aD48L3N2Zz4=">`)
+        } else if (item.type === 'browserpage') { // 浏览器快捷命令
+            $(liHtml).append(`<img class="jstart-type-icon" alt src="data:image/svg+xml;base64,PHN2ZyB0PSIxNjcwNTU4MTAzNDU0IiBjbGFzcz0iaWNvbiIgdmlld0JveD0iMCAwIDEwMjQgMTAyNCIgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHAtaWQ9IjU4NTkiIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCI+PHBhdGggZD0iTTk4MS4zMzMzMzMgNTU0LjY2NjY2N2gtODcuODUwNjY2YTM4MC41NDQgMzgwLjU0NCAwIDAgMS0yOS44NjY2NjcgMTEwLjkzMzMzM2w3Ni4wMzIgNDMuOTA0YTQyLjY2NjY2NyA0Mi42NjY2NjcgMCAxIDEtNDIuNjY2NjY3IDczLjg5ODY2N2wtNzYuMjg4LTQ0LjA3NDY2N2EzODUuOTYyNjY3IDM4NS45NjI2NjcgMCAwIDEtODEuMjggODEuMDY2NjY3bDQ0LjA3NDY2NyA3Ni4zMzA2NjZhNDIuNjY2NjY3IDQyLjY2NjY2NyAwIDEgMS03My44OTg2NjcgNDIuNjY2NjY3bC00My45MDQtNzYuMDc0NjY3YTM4MS4yNjkzMzMgMzgxLjI2OTMzMyAwIDAgMS0xMTEuMTQ2NjY2IDI5Ljg2NjY2N1Y5ODEuMzMzMzMzYTQyLjY2NjY2NyA0Mi42NjY2NjcgMCAwIDEtODUuMzMzMzM0IDB2LTg3Ljg1MDY2NmEzODEuMjY5MzMzIDM4MS4yNjkzMzMgMCAwIDEtMTExLjE0NjY2Ni0yOS44NjY2NjdsLTQzLjkwNCA3Ni4wNzQ2NjdhNDIuNjY2NjY3IDQyLjY2NjY2NyAwIDEgMS03My44OTg2NjctNDIuNjY2NjY3bDQ0LjA3NDY2Ny03Ni4zMzA2NjdhMzg1Ljk2MjY2NyAzODUuOTYyNjY3IDAgMCAxLTgxLjI4LTgxLjA2NjY2NmwtNzYuMjg4IDQ0LjA3NDY2NmE0Mi42NjY2NjcgNDIuNjY2NjY3IDAgMSAxLTQyLjY2NjY2Ny03My44OTg2NjZsNzYuMDMyLTQzLjkwNGEzODAuNTQ0IDM4MC41NDQgMCAwIDEtMjkuODY2NjY3LTExMC45MzMzMzRINDIuNjY2NjY3YTQyLjY2NjY2NyA0Mi42NjY2NjcgMCAxIDEgMC04NS4zMzMzMzNoODcuODUwNjY2YTM4MC41NDQgMzgwLjU0NCAwIDAgMSAyOS44NjY2NjctMTEwLjkzMzMzM0w4NC4zNTIgMzE0Ljc5NDY2N2E0Mi42NjY2NjcgNDIuNjY2NjY3IDAgMCAxIDQyLjY2NjY2Ny03My44OTg2NjdsNzYuMjg4IDQ0LjA3NDY2N2EzODUuOTYyNjY3IDM4NS45NjI2NjcgMCAwIDEgODEuMjgtODEuMDY2NjY3TDI0MC41MTIgMTI3LjU3MzMzM2E0Mi42NjY2NjcgNDIuNjY2NjY3IDAgMSAxIDczLjg5ODY2Ny00Mi42NjY2NjZsNDMuOTA0IDc2LjAzMmEzODEuMjY5MzMzIDM4MS4yNjkzMzMgMCAwIDEgMTExLjE0NjY2Ni0yOS44NjY2NjdWNDIuNjY2NjY3YTQyLjY2NjY2NyA0Mi42NjY2NjcgMCAwIDEgODUuMzMzMzM0IDB2ODcuODUwNjY2YTM4MS4yNjkzMzMgMzgxLjI2OTMzMyAwIDAgMSAxMTEuMTQ2NjY2IDI5Ljg2NjY2N2w0My45MDQtNzYuMDMyYTQyLjY2NjY2NyA0Mi42NjY2NjcgMCAwIDEgNzMuODk4NjY3IDQyLjY2NjY2N2wtNDQuMDc0NjY3IDc2LjMzMDY2NmEzODUuODM0NjY3IDM4NS44MzQ2NjcgMCAwIDEgODEuMjggODEuMDY2NjY3bDc2LjI4OC00NC4wNzQ2NjdhNDIuNjY2NjY3IDQyLjY2NjY2NyAwIDAgMSA0Mi42NjY2NjcgNzMuODk4NjY3TDg2My43NDQgMzU4LjRhMzgwLjU0NCAzODAuNTQ0IDAgMCAxIDI5Ljg2NjY2NyAxMTAuOTMzMzMzSDk4MS4zMzMzMzNhNDIuNjY2NjY3IDQyLjY2NjY2NyAwIDEgMSAwIDg1LjMzMzMzNHpNNTEyIDIxMy4zMzMzMzNhMjk4LjY2NjY2NyAyOTguNjY2NjY3IDAgMSAwIDI5OC42NjY2NjcgMjk4LjY2NjY2NyAyOTguNjY2NjY3IDI5OC42NjY2NjcgMCAwIDAtMjk4LjY2NjY2Ny0yOTguNjY2NjY3eiIgcC1pZD0iNTg2MCIgZmlsbD0iI2U2ZTZlNiI+PC9wYXRoPjxwYXRoIGQ9Ik04MTAuNjY2NjY3IDY4MS4wNDUzMzNhNDIuNjY2NjY3IDQyLjY2NjY2NyAwIDAgMS01OC4yODI2NjcgMTUuNjE2bC0yNDQuMTM4NjY3LTE0MC44TDI3Ni42OTMzMzMgNjc4LjRhNDQuNTg2NjY3IDQ0LjU4NjY2NyAwIDAgMS01OC4wMjY2NjYtMTQuMjkzMzMzIDM3LjI5MDY2NyAzNy4yOTA2NjcgMCAwIDEgMTUuNTMwNjY2LTUzLjI5MDY2N0w0NjkuMzMzMzMzIDQ4Ni40VjIxMy4zMzMzMzNhNDIuNjY2NjY3IDQyLjY2NjY2NyAwIDAgMSA4NS4zMzMzMzQgMHYyNzAuNjM0NjY3bDI0MC4zODQgMTM4Ljc5NDY2N0E0Mi42NjY2NjcgNDIuNjY2NjY3IDAgMCAxIDgxMC42NjY2NjcgNjgxLjA0NTMzM3oiIHAtaWQ9IjU4NjEiIGZpbGw9IiNlNmU2ZTYiPjwvcGF0aD48L3N2Zz4=">`)
+        }
         $(suggestHtml).append(liHtml)
-        // suggestHtml.appendChild(liHtml)
     })
     $("#j-search-view").append(suggestHtml)
 }
 
-// 匹配书签
+// 匹配快捷命令：书签 设置 历史记录
 function addBookmarksInSuggest() {
     let currentInput = getInputValue()
-    if (!currentInput) return
+    if (!currentInput) return null
+    const isQuickSearch  = currentInput.indexOf('/') === 0 || currentInput.indexOf('、') === 0
     if (currentInput === '/' || currentInput === '、') { // 搜索书签快捷键
         list = []
         // 加载历史记录，按常用排序
 
     } else if (currentInput.length > 1) {
-        let targetBookmarks = jStartBookmarks.filter(bookmark => bookmark['title'].includes(currentInput))
-        if (targetBookmarks.length > 3) targetBookmarks = [targetBookmarks[0], targetBookmarks[1], targetBookmarks[3]] // 最多三个
-        targetBookmarks.map(item => {
-            item['type'] = 'bookmark'
-            item['q'] = item.title
-            return item
-        })
-        return targetBookmarks
+        let searchWord = currentInput.toLowerCase()
+        if (isQuickSearch) {
+            searchWord = searchWord.substr(1)
+        }
+        // 匹配浏览器快捷命令
+        let targetList = []
+        targetList = targetList.concat(jStartBrowserPage.filter(item => item['q'].toLowerCase().includes(searchWord)))
+        // 匹配书签
+        let targetBookmarks = jStartBookmarks.filter(bookmark => bookmark['title'].toLowerCase().includes(searchWord))
+        targetList = targetList.concat(targetBookmarks)
+        if (!isQuickSearch && targetList.length > 3) targetList = targetList.slice(0, 3) // 最多三个
+        return targetList
     }
-    return []
+    return null
 }
 
 // 隐藏联想view
@@ -242,7 +268,9 @@ function getSuggestSelected() {
     if (jStartSuggestSelectedIndex < 0) return null
     let item = jStartSuggestList[jStartSuggestSelectedIndex]
     if (item.type === 'bookmark') {
-        return {type: item.type, value: item.url}
+        return {type: 'url', value: item.url}
+    } else if (item.type === 'browserpage') {
+        return {type: 'url', value: item.url}
     } else {
         return {type: 'keyword', value: item.q}
     }
@@ -321,8 +349,13 @@ function focusOnSearch() {
 function onInputChange(e) {
     const text = getInputValue()
     if (!text) {
-        showSuggest([]) // 清空联想词显示
+        removeSuggest() // 清空联想词显示
         return
+    } else if (text.indexOf('/') === 0 || text.indexOf('、') === 0) {
+        showSuggest([]) // 快捷键: 快捷操作：书签，设置页面
+        return
+    } else {
+        showSuggest([]) // 先展示本地匹配，等待网络搜索回来
     }
     const sendDic = { type: jStartSearchType, searchWord: text }
     chrome.runtime.sendMessage(chrome.runtime.id, sendDic).then((response) => {
@@ -386,13 +419,16 @@ function getstr() {
 const envMeta = document.getElementsByTagName('meta')['newtab-jstart-flag']
 jStarttabStart = envMeta && envMeta.content && envMeta.content === 'true'
 if (jStarttabStart) {
-    console.log('content js ： new tab start ~~')
+    console.log('content js : new tab start ~~')
     $(document).ready(function () {
         showMainView()
         // 向background.js请求书签信息
-        const sendDic = { type: 'getBookmarks' }
+        const sendDic = { type: 'contentJsLoadInNewTab' }
         chrome.runtime.sendMessage(chrome.runtime.id, sendDic).then((response) => {
         });
+        // 显示起始页动画
+        // $("#jstart-curveWrap").css("opacity", "0.5");
+        $("#jstart-curveWrap").fadeTo("fast", 0.5)
     });
     window.onload = function () {
         if (location.search !== "?x") { // 自动获得焦点

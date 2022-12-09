@@ -31,7 +31,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             // sendResponse 貌似只支持同步回调，我试了异步是无法回调回去的
             // sendResponse(JSON.stringify(result))
         })
-    } else if (request && request['type'] === 'getBookmarks') {
+    } else if (request && request['type'] === 'contentJsLoadInNewTab') { // 通知：新标签页加载
         sendBookmarksToContentJS()
     }
     return true
@@ -57,7 +57,7 @@ function requestSearch(text, type = 'baidu', callback) {
             sendMessageToContentJS({ type: 'baidu', data: data })
         })
     } else if (type === 'google') {
-        fetch(`http://suggestqueries.google.com/complete/search?output=toolbar&hl=zh&q=${text}`).then(response => {
+        fetch(`http://suggestqueries.google.com/complete/search?output=toolbar&hl=zh&q=${text}`,).then(response => {
             return response.text()
         }).then(str => {
             callback(str)

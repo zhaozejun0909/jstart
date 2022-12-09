@@ -1,11 +1,10 @@
 .curveWrap {
-    opacity: 0.5;
+    opacity: 0;
     width: 150vw;
     height: 100vh;
     position: absolute;
     -webkit-transform: translateX(-30vw) rotate(-15deg);
     transform: translateX(-30vw) rotate(-15deg);
-    animation: fadein 2s linear 1;
     will-change: transform;
 }
 

@@ -1,1 +1,1 @@
-// 逻辑都在 content.js 内
+// 搜索显示都在 content.js 内
