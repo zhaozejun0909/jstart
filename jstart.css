@@ -33,6 +33,7 @@
     flex-wrap: wrap;
     padding: 5px 14px 0 14px;
     height: 44px;
+    box-sizing: border-box;
 }
 
 .jstart-content-view > .j-search-view > .j-search-content >.j-search-icon-view {
