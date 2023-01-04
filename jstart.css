@@ -98,10 +98,11 @@
     text-align: left;
     color: aliceblue;
     font-size: 14px;
+    padding-bottom: 6px;
 }
 
 .j-search-view >.jstart-suggest-view >.jstart-suggest-view-line {
-    height: 10px;
+    height: 8px;
     margin: 0 13px;
     border-top: 1px solid #5f6368;
     opacity: 0.5;
