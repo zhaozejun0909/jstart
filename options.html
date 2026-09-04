@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JStart Commands</title>
+    <link rel="stylesheet" href="options.css">
+</head>
+<body>
+    <main class="options-shell">
+        <header class="options-header">
+            <div>
+                <h1>JStart Settings</h1>
+                <p>/ 命令与搜索配置</p>
+            </div>
+            <button class="primary-button" id="add-command" type="button">新增</button>
+        </header>
+
+        <section class="command-editor" id="command-editor" hidden>
+            <input id="command-id" type="hidden">
+            <label>
+                <span>命令</span>
+                <div class="command-key-field">
+                    <strong>/</strong>
+                    <input id="command-key" type="text" autocomplete="off" placeholder="jira">
+                </div>
+            </label>
+            <label>
+                <span>名称</span>
+                <input id="command-name" type="text" autocomplete="off" placeholder="Jira Issue">
+            </label>
+            <label class="wide-field">
+                <span>URL 模板</span>
+                <input id="command-url" type="url" autocomplete="off" placeholder="https://example.com/search?q={query}">
+            </label>
+            <label class="toggle-field">
+                <input id="command-newtab" type="checkbox">
+                <span>新标签页打开</span>
+            </label>
+            <div class="editor-actions">
+                <button class="primary-button" id="save-command" type="button">保存</button>
+                <button class="ghost-button" id="cancel-edit" type="button">取消</button>
+            </div>
+        </section>
+
+        <section class="command-list" id="command-list"></section>
+        <p class="empty-state" id="empty-state">还没有自定义命令</p>
+
+        <section class="settings-section">
+            <header class="section-header">
+                <div>
+                    <h2>忽略书签目录</h2>
+                    <p>被忽略目录内的书签不会出现在 JStart 搜索结果里。</p>
+                </div>
+                <button class="primary-button" id="save-bookmark-folders" type="button">保存</button>
+            </header>
+            <div class="bookmark-folder-list" id="bookmark-folder-list"></div>
+            <p class="empty-state" id="bookmark-empty-state" hidden>没有可配置的书签目录</p>
+        </section>
+    </main>
+    <script src="options.js"></script>
+</body>
+</html>

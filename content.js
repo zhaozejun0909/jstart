@@ -1,440 +1,666 @@
 /* eslint-disable */
-// console.log('hello world content todo something~')
 
-let jStrartActived = false // 激活状态：页面是否显示 
-let jStartSearchType = 'google'; // baidu google
+let jStrartActived = false
+let jStartSearchType = 'google'
 let jStarttabStart = false
-let jStartCommandKeyDown = false
-let jStartSuggestList = []
-let jStartSuggestSelectedIndex = -1 // 选中的推荐index
-let jStartBookmarks = []
-const jStartBrowserPage = [
-    // chrome 不支持通过js跳转浏览器页面，暂时注释掉了
-    // {type: 'browserpage', q: 'history chrome 历史记录', url: 'chrome://history/'},
-    // {type: 'browserpage', q: 'setting chrome 设置', url: 'chrome://settings/'},
-    // {type: 'browserpage', q: 'extensions chrome 扩展插件', url: 'chrome://extensions/'},
-    // {type: 'browserpage', q: 'downloads chrome 下载', url: 'chrome://downloads/'},
-    // {type: 'browserpage', q: 'bookmarks chrome 书签收藏', url: 'chrome://bookmarks/'},
-]
+let jStartEngineResults = []
+let jStartLocalResults = []
+let jStartSuggestSelectedIndex = -1
+let jStartInputVersion = 0
+let jStartHost = null
+let jStartRoot = null
+let jStartIsComposing = false
+let jStartLoadingResultId = null
+let jStartLoadingUrl = ''
 
-// 监听按钮点击 或者快捷键
+const SEARCH_LOGOS = {
+    google: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PHBhdGggZmlsbD0iI0ZCQkMwNSIgZD0iTTQzLjYgMjAuNUgyNHY3LjloMTEuM0MzNC4yIDMzLjcgMjkuOCAzNyAyNCAzN2MtNy4yIDAtMTMtNS44LTEzLTEzczUuOC0xMyAxMy0xM2MzLjEgMCA1LjkgMS4xIDguMSAyLjlsNS42LTUuNkMzNC4xIDQuNSAyOS4zIDIgMjQgMiAxMS44IDIgMiAxMS44IDIgMjRzOS44IDIyIDIyIDIyYzExIDAgMjEtOCAyMS0yMiAwLTEuMy0uMS0yLjQtLjQtMy41eiIvPjxwYXRoIGZpbGw9IiNFQTQzMzUiIGQ9Ik02LjMgMTQuN2w2LjYgNC44QzE0LjcgMTQuNiAxOSAzMSAyNCAzMWMzLjEgMCA1LjktMS4xIDguMS0yLjlsNS42IDUuNkMzNC4xIDM3LjUgMjkuMyA0MCAyNCA0MGMtOC44IDAtMTYtNy4yLTE2LTE2IDAtMy4zIDEuMS02LjQgMy4zLTkuM3oiLz48cGF0aCBmaWxsPSIjMzRBODUzIiBkPSJNNi4zIDMzLjNsNi42LTQuOEMxNC43IDMzLjQgMTkgMzcgMjQgMzdjMy4xIDAgNS45LTEuMSA4LjEtMi45bDUuNiA1LjZDMzQuMSA0My41IDI5LjMgNDYgMjQgNDYgMTYuMSA0NiA5LjIgNDEuOCA1LjMgMzUuNXoiLz48cGF0aCBmaWxsPSIjNDI4NUY0IiBkPSJNNDUgMjRjMC0xLjMtLjEtMi40LS40LTMuNUgyNHY3LjloMTEuM0MzNC44IDMxIDMwLjUgMzcgMjQgMzdjLTMuMSAwLTUuOS0xLjEtOC4xLTIuOWwtNS42IDUuNkMxNC4xIDQzLjUgMTguOSA0NiAyNCA0NmMxMSAwIDIxLTggMjEtMjJ6Ii8+PC9zdmc+',
+    baidu: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzMzODVmZiI+PHBhdGggZD0iTTkuMTU0IDBDNy43MSAwIDYuNTQgMS42NTggNi41NCAzLjcwN2MwIDIuMDUxIDEuMTcxIDMuNzEgMi42MTUgMy43MSAxLjQ0NiAwIDIuNjE0LTEuNjU5IDIuNjE0LTMuNzFDMTEuNzY4IDEuNjU4IDEwLjYgMCA5LjE1NCAwem03LjAyNS41OTRDMTQuODYuNTggMTMuMzQ3IDIuNTg5IDEzLjIgMy45MjdjLS4xODcgMS43NDUuMjUgMy40ODcgMi4xNzkgMy43MzUgMS45MzMuMjUgMy4xNzUtMS44MDYgMy40MjItMy4zNjQuMjUyLTEuNTU1LS45OTUtMy4zNjQtMi4zNjItMy42NzRhMS4yMTggMS4yMTggMCAwIDAtLjI2MS0uMDN6TTMuNTgyIDUuNTM1YTIuODExIDIuODExIDAgMCAwLS4xNTYuMDA4Yy0yLjExOC4xOS0yLjQyOCAzLjI0LTIuNDI4IDMuMjQtLjI4NyAxLjQxLjY4NiA0LjQyNSAzLjI5NyAzLjg2NCAyLjYxNy0uNTYxIDIuMjYyLTMuNjggMi4xODMtNC4zNjItLjEyNS0xLjAxOC0xLjI5Mi0yLjc3My0yLjg5Ni0yLjc1em0xNi41MzQgMS43NTNjLTIuMzA4IDAtMi42MTcgMi4xMTktMi42MTcgMy42MTYgMCAxLjQzLjEyMSAzLjQyNSAyLjk4OCAzLjM2MiAyLjg2Ny0uMDYzIDIuNTUzLTMuMjM4IDIuNTUzLTMuOTg4IDAtLjc0NS0uNjItMi45OS0yLjkyNC0yLjk5em0tOC4yNjQgMi40NzhjLTEuNDI0LjAxNC0yLjcwOC45MjUtMy4zMjMgMS45NDctMS4xMTggMS44NjgtMi44NjMgMy4wNS0zLjExMiAzLjM2My0uMjUuMzA5LTMuNjEgMi4xMTYtMi44NjQgNS40Mi43NDYgMy4zMDEgMy4zNjUgMy4yMzcgMy4zNjUgMy4yMzdzMS45My4xOSA0LjE3MS0uMzFjMi4yNC0uNDk1IDQuMTcuMTIzIDQuMTcuMTIzczUuMjMzIDEuNzQ4IDYuNjY1LTEuNjE2YzEuNDMtMy4zNjQtLjgwOC01LjEwOS0uODA4LTUuMTA5cy0yLjk5LTIuMzA2LTQuNzM2LTQuNzk4Yy0xLjA3Mi0xLjY2NS0yLjM0OC0yLjI2OC0zLjUyOC0yLjI1N3ptLTIuMjM0IDMuODRsMS41NDIuMDI0djguMTk3SDcuNzU4Yy0xLjQ3LS4yOTEtMi4wNTUtMS4yOTItMi4xMy0xLjQ2Mi0uMDcyLS4xNzMtLjQ4OC0uOTc2LS4yNjgtMi4zNDMuNjM1LTIuMDQ5IDIuNDQ3LTIuMTk2IDIuNDQ3LTIuMTk2aDEuODF6bTMuOTY0IDIuMzl2My44ODFjLjA5Ni40MTMuNjEyLjQ4OC42MTIuNDg4aDEuNjE0di00LjM0M2gxLjY4OXY1Ljc4MmgtMy45MTVjLTEuNTE3LS4zOS0xLjU5LTEuNDY1LTEuNTktMS40NjV2LTQuMzE3em0tNS40NTggMS4xNDdjLS42Ni4xOTctLjk3OC43MDgtMS4wNS45MjgtLjA3Ni4yMi0uMjQ3Ljc4LS4xIDEuMjY5LjI5NCAxLjA5NSAxLjI0OCAxLjE0NCAxLjI0OCAxLjE0NGgxLjM3di0zLjM0eiIvPjwvc3ZnPg==',
+    bing: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMCAyMCI+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjgiIGhlaWdodD0iOCIgZmlsbD0iI2YyNTAyMiIvPjxyZWN0IHg9IjExIiB5PSIxIiB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjN2ZiYTAwIi8+PHJlY3QgeD0iMSIgeT0iMTEiIHdpZHRoPSI4IiBoZWlnaHQ9IjgiIGZpbGw9IiMwMGE0ZWYiLz48cmVjdCB4PSIxMSIgeT0iMTEiIHdpZHRoPSI4IiBoZWlnaHQ9IjgiIGZpbGw9IiNmZmI5MDAiLz48L3N2Zz4='
+}
+
+const TYPE_LABELS = {
+    engine: '搜索',
+    bookmark: '书签',
+    tab: '标签',
+    history: '历史',
+    command: '命令'
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    // console.log("content.js Received request: ", message, sender);
-    if (!message.type) return
-    if (message.type === 'jstart'){
+    if (!message.type) return false
+    if (message.type === 'jstart') {
         if (message.data === 'showStartPage') {
-            showMainView();
-        } else if (message.data === 'openResultInNewTab') {
-            if (jStrartActived) {
-                handleResult('keyword', getInputValue(), true)
-            }
+            showMainView()
+        } else if (message.data === 'openResultInNewTab' && jStrartActived) {
+            submitCurrentInput(true)
+        } else {
+            return false
         }
-    } else if (message.type === 'google' || message.type === 'baidu') {
-        // 搜索结果回调
-        handleSeachResult(message)
-    } else if (message.type === 'bookmarks') {
-        // 接收书签信息
-        handleBookmarks(message.data)
+    } else if (message.type === 'google' || message.type === 'baidu' || message.type === 'bing') {
+        handleSearchResult(message)
+    } else {
+        return false
     }
     sendResponse(true)
-    return true
+    return false
 });
 
-function showMainView(message) {
-    if (document.getElementById("jstart-content-view")) {
+function showMainView() {
+    if (document.getElementById('jstart-shadow-host')) {
         removeHTML()
     } else {
         insertHTML()
     }
-    // initVue()
+}
+
+function setNewTabGuideVisible(visible) {
+    if (!jStarttabStart || !document.body) return
+    document.body.classList.toggle('jstart-guide-visible', visible)
 }
 
 function insertHTML() {
-    console.log('jstart 加载 ~')
-    const div = document.createElement("div")
-    document.body.appendChild(div);
-    div.outerHTML = getstr()
+    setNewTabGuideVisible(false)
+    jStartHost = document.createElement('div')
+    jStartHost.id = 'jstart-shadow-host'
+    jStartHost.style.all = 'initial'
+    jStartHost.style.position = 'fixed'
+    jStartHost.style.inset = '0'
+    jStartHost.style.zIndex = '2147483647'
+    jStartHost.style.visibility = 'hidden'
+    document.documentElement.appendChild(jStartHost)
+    jStartRoot = jStartHost.attachShadow({ mode: 'open' })
+    jStartRoot.innerHTML = `
+        <link rel="stylesheet" href="${chrome.runtime.getURL('jstart.css')}">
+        ${getstr()}
+    `
     jStrartActived = true
-    // 渐入动画
+    jStartEngineResults = []
+    jStartLocalResults = []
+    jStartSuggestSelectedIndex = -1
+
+    const view = getJStartElement('jstart-content-view')
     if (jStarttabStart) {
-        $("#jstart-content-view").prop("style").display = 'block'
+        view.style.display = 'block'
     } else {
-        $("#jstart-content-view").fadeIn(300, function () {
-        });
+        view.style.display = 'block'
+        view.classList.add('jstart-content-visible')
     }
 
-    // 自动获取焦点
-    focusOnSearch()
-    // 搜索事件 
-    let inputE = $("#j-input-view-input")
-    inputE.keyup(function (e) {
-        // console.log(e.keyCode + ' 按键被松开')
-        if (e && e.keyCode === 91) { // Command 键
-            // 用于 Commond + Enter 快捷键
-            jStartCommandKeyDown = false
-        }
-    })
-    inputE.keydown(function (e) {
-        // console.log(e.keyCode + ' 按键被按下')
-        if (e && e.keyCode === 13) { // enter键
-            const suggestContent = getSuggestSelected()
-            const newTab = jStartCommandKeyDown
-            if (suggestContent) {
-                handleResult(suggestContent.type, suggestContent.value, newTab)
-            } else {
-                handleResult('keyword', getInputValue(), newTab)
-            }
-            e.preventDefault();
-        } else if (e.keyCode === 27) { // ESC键
-            removeHTML()
-            e.preventDefault();
-        } else if (e.keyCode === 9) { // tab键
-            if (jStartSuggestList.length) changeSuggestResult('next')
-            else changeSearchType()
-            e.preventDefault();
-        } else if (e && e.keyCode === 91) { // Command 键
-            // 用于 Commond + Enter 快捷键
-            jStartCommandKeyDown = true
-        } else if (e && (e.keyCode === 40 || e.keyCode === 38)) { // 下 方向键
-            changeSuggestResult(e.keyCode)
-            e.preventDefault();
-        }
-    })
-
-    // 切换搜索平台
-    chrome.storage.local.get(['jStartSearchType'], function (result) { // 默认 读取上次使用
-        if (result && result['jStartSearchType']) {
-            jStartSearchType = result['jStartSearchType']
+    chrome.storage.local.get(['jStartSearchType'], function (result) {
+        if (result && result.jStartSearchType) {
+            jStartSearchType = result.jStartSearchType
             refreshLogo()
         }
-    });
-    $(".j-logo-view-div-img").click(changeSearchType)
+    })
 
-    document.getElementById("j-input-view-input").oninput = debounce(onInputChange, 200)
+    const input = getJStartElement('j-input-view-input')
+    input.addEventListener('keydown', handleJStartKeydown, true)
+    input.addEventListener('input', debounce(onInputChange, 120))
+    input.addEventListener('compositionstart', () => {
+        jStartIsComposing = true
+    })
+    input.addEventListener('compositionend', () => {
+        jStartIsComposing = false
+    })
+    getJStartElement('j-logo-view-button').addEventListener('click', changeSearchType)
+    getJStartElement('jstart-content-view').addEventListener('click', handleBackdropClick)
+    addPageShortcutBlockers()
+    revealAfterStyleLoaded()
 }
 
-// 触发搜索点击事件
-function handleResult(type, value, newTab) {
-    if (type === 'keyword') {
-        let goUrl = ''
-        if (value.length === 0) {
-            // 直接回车会打开对应的搜索平台
-            if (jStartSearchType === 'google') {
-                goUrl = `https://www.google.com/search`
-            } else {
-                goUrl = `https://www.baidu.com/`
-            }
-        } else {
-            if (jStartSearchType === 'google') {
-                goUrl = `https://www.google.com/search?q=${encodeURIComponent(value)}`
-            } else {
-                goUrl = `https://www.baidu.com/s?ie=UTF-8&wd=${encodeURIComponent(value)}`
-            }
-        } 
-        if (!newTab) {
-            location.assign(goUrl)
-        } else {
-            window.open(goUrl, '_blank')
-            removeHTML()
-        }
-    } else if (type === 'url') {
-        // 保存点击记录
-        if (!newTab) {
-            location.assign(value)
-        } else {
-            window.open(value, '_blank')
-            removeHTML()
-        }
+function submitCurrentInput(newTab) {
+    const result = getSuggestSelected()
+    if (result) {
+        executeSuggestResult(result, newTab)
+        return
     }
+
+    const value = getInputValue()
+    if (value.startsWith('/') && jStartLocalResults.length === 1) {
+        executeSuggestResult(jStartLocalResults[0], newTab)
+        return
+    }
+
+    if (!value.startsWith('/')) {
+        handleKeywordSearch(value, newTab)
+    }
+}
+
+function executeSuggestResult(result, newTab) {
+    if (result.action && result.action.kind === 'fill') {
+        const input = getJStartElement('j-input-view-input')
+        input.value = result.action.value
+        onInputChange()
+        return
+    }
+
+    if (result.type === 'engine') {
+        if (!newTab) showLoadingState(result, buildKeywordSearchUrl(result.title))
+        handleKeywordSearch(result.title, newTab)
+        return
+    }
+
+    const keepUIWhileNavigating = shouldKeepUIWhileNavigating(result, newTab)
+    if (keepUIWhileNavigating) showLoadingState(result, getResultTargetUrl(result))
+    chrome.runtime.sendMessage(chrome.runtime.id, {
+        type: 'jstart:executeResult',
+        result,
+        newTab
+    }).then(() => {
+        if (!keepUIWhileNavigating) removeHTML()
+    }).catch(() => {
+        if (keepUIWhileNavigating) clearLoadingState()
+    })
+}
+
+function shouldKeepUIWhileNavigating(result, newTab) {
+    const action = result && result.action
+    if (!action) return false
+    if (action.kind === 'open_url') return !newTab
+    if (action.kind === 'open_url_template') return !(action.openInNewTab || newTab)
+    return false
+}
+
+function handleKeywordSearch(value, newTab) {
+    const goUrl = buildKeywordSearchUrl(value)
+
+    if (!newTab) {
+        location.assign(goUrl)
+    } else {
+        window.open(goUrl, '_blank')
+        removeHTML()
+    }
+}
+
+function buildKeywordSearchUrl(value) {
+    const encoded = encodeURIComponent(value)
+    if (value.length === 0) {
+        if (jStartSearchType === 'google') return 'https://www.google.com/search'
+        if (jStartSearchType === 'baidu') return 'https://www.baidu.com/'
+        if (jStartSearchType === 'bing') return 'https://www.bing.com/'
+    }
+    if (jStartSearchType === 'google') return `https://www.google.com/search?q=${encoded}`
+    if (jStartSearchType === 'baidu') return `https://www.baidu.com/s?ie=UTF-8&wd=${encoded}`
+    if (jStartSearchType === 'bing') return `https://www.bing.com/search?q=${encoded}`
+    return ''
+}
+
+function showLoadingState(result, targetUrl) {
+    jStartLoadingResultId = result && result.id
+    jStartLoadingUrl = targetUrl || ''
+    refreshLoadingResult()
+}
+
+function clearLoadingState() {
+    jStartLoadingResultId = null
+    jStartLoadingUrl = ''
+    refreshLoadingResult()
+}
+
+function refreshLoadingResult() {
+    getJStartElements('.jstart-suggest-view-item').forEach(item => {
+        const result = getSelectableResults()[Number(item.getAttribute('data-index'))]
+        const isLoading = result && result.id === jStartLoadingResultId
+        item.classList.toggle('jstart-loading-result', Boolean(isLoading))
+        const subtitle = item.querySelector('.jstart-suggest-subtitle')
+        if (isLoading && subtitle) subtitle.textContent = `正在打开 ${jStartLoadingUrl || getResultTargetUrl(result) || result.title || ''}`
+    })
+}
+
+function getResultTargetUrl(result) {
+    const action = result && result.action
+    if (!action) return result && result.url ? result.url : ''
+    if (action.kind === 'open_url') return action.url || result.url || ''
+    if (action.kind === 'open_url_template') return buildUrlFromTemplate(action.urlTemplate, action.query)
+    return result && result.url ? result.url : ''
+}
+
+function buildUrlFromTemplate(template, query) {
+    const encoded = encodeURIComponent(query || '')
+    const raw = query || ''
+    return `${template || ''}`
+        .replaceAll('{query}', encoded)
+        .replaceAll('{raw}', raw)
 }
 
 function removeHTML() {
-    console.log('jstart 退出 ~')
-    const div = document.getElementById("jstart-content-view")
-    if (div) {
-        div.remove()
-        jStrartActived = false
-    }
+    removePageShortcutBlockers()
+    if (jStartHost) jStartHost.remove()
+    jStartHost = null
+    jStartRoot = null
+    jStrartActived = false
+    setNewTabGuideVisible(true)
 }
 
-// 处理书签结果
-function handleBookmarks(list) {
-    jStartBookmarks = list.map(item => {
-        item['type'] = 'bookmark'
-        item['q'] = item.title
-        return item
-    })
-}
+function handleSearchResult(result) {
+    if (!result.type || !result.data || result.query !== getInputValue()) return
 
-// 接收到搜索联想关键词请求
-function handleSeachResult(result) {
-    if (!result['type'] || !result['data']) return
-    const type = result['type']
-    const data = result['data']
+    const type = result.type
+    const data = result.data
+    let list = []
+
     if (type === 'baidu') {
         try {
-            const dataObj = data
-            let list = dataObj['g']
-            list.forEach(item => {
-                item.type = type
-            })
-            showSuggest(list)
-        } catch (error) { }
+            list = (data.g || []).map(item => createEngineResult(item.q))
+        } catch (error) {}
     } else if (type === 'google') {
         try {
             const xmlData = $.parseXML(data)
             const xmlDom = $(xmlData)
-            const elementlist = xmlDom.find("suggestion");
-            const list = []
-            elementlist.each((index, element) => {
-                const content = $(element).attr('data');
-                if (content) {
-                    list.push({ type: type, q: content })
-                }
+            xmlDom.find('suggestion').each((index, element) => {
+                const content = $(element).attr('data')
+                if (content) list.push(createEngineResult(content))
             })
-            showSuggest(list)
-        } catch (error) { }
+        } catch (error) {}
+    } else if (type === 'bing') {
+        try {
+            if (Array.isArray(data) && data.length > 1 && Array.isArray(data[1])) {
+                list = data[1].filter(Boolean).map(createEngineResult)
+            }
+        } catch (error) {}
+    }
+
+    jStartEngineResults = list
+    renderSuggest()
+}
+
+function createEngineResult(title) {
+    return {
+        id: `engine:${title}`,
+        type: 'engine',
+        title,
+        subtitle: jStartSearchType,
+        action: {
+            kind: 'search'
+        }
     }
 }
 
-// 显示搜索结果
-function showSuggest(list) {
-    // console.log("🚀 ~ file: content.js:147 ~ showSuggest ~ list", list)
-    let booksMatch = addBookmarksInSuggest() // 匹配书签和快捷命令
-    if (booksMatch) list = booksMatch.concat(list)
-    if (!list) return
-    removeSuggest()
-    if (list.length === 0) return
-    jStartSuggestList = list
-    // 显示输入联想
-    let suggestHtml = $(`<div class="jstart-suggest-view" id="jstart-suggest-view"></div>`)
-    $(suggestHtml).append(`<div class="jstart-suggest-view-line"></div>`)
-    $(suggestHtml).mousemove(() => { // 鼠标移动才添加 hover 效果，优化选中时机效果
-        if (!$(".jstart-suggest-view-item").hasClass("jstart-hover")) {
-            $(".jstart-suggest-view-item").addClass('jstart-hover')
-        }
-    })
-    list.forEach((item, index) => {
-        let liHtml = $(`<li class="jstart-suggest-view-item">${item.q}</li>`)
-        $(liHtml).click(function () {
-            suggestClick(index)
-        })
-        if (item.type === 'bookmark') { // 添加书签icon
-            $(liHtml).append(`<img class="jstart-type-icon" alt src="data:image/svg+xml;base64,PHN2ZyB0PSIxNjcwNTUxNDA1MzQyIiBjbGFzcz0iaWNvbiIgdmlld0JveD0iMCAwIDEwMjQgMTAyNCIgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHAtaWQ9IjEzOTIiIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCI+PHBhdGggZD0iTTczNy43IDE3MS44djI5OS42QzY4OSA0MzQuNiA2NDMuOSA0MDAuNiA1OTggMzY1LjljLTQ1LjEgMzQuNi04OS43IDY4LjctMTM3LjkgMTA1LjZWMTY1LjZjLTI5LjIgMC01NS41LTAuMy04MS44IDAuMS0zMy43IDAuNS02Ny43LTEtMTAxIDIuOC00Ny4zIDUuNC04MS41IDQ1LjMtODEuNiA5Mi42LTAuNCAxNjIuMi0wLjQgMzI0LjMgMCA0ODYuNSAwLjEgNTQuNCA0Mi4xIDkzLjcgMTAwLjcgOTUuOSAxNy4yIDAuNiAzNC40IDAuMiA1MS42IDAuMSAxNS43IDAgMjUuOCA3IDI2IDIzLjMgMC4yIDE2LjItMTAuMSAyNC4yLTI1LjQgMjQuMi0yNy4xLTAuMi01NC41IDEtODEuMS0yLjktNjcuOC0xMC4yLTExOC44LTY2LjctMTE5LjQtMTM1LjctMS40LTE2NS41LTEuNi0zMzEgMC4xLTQ5Ni40IDAuOC03Ny40IDY1LjgtMTM3LjcgMTQzLjQtMTM4IDE0Mi4zLTAuNSAyODQuNi0wLjYgNDI2LjktMC41IDcwLjUgMCAxMzcuNSA2MC45IDEzOS44IDEzMS42IDIuNyA4NCAxLjEgMTY4LjEgMS4xIDI1Mi4yIDAgMTUuNi04LjMgMjUuMy0yNC41IDI0LjktMTcuNi0wLjUtMjMuNi0xMi42LTIzLjYtMjguMy0wLjItNjAuOS0wLjEtMTIxLjgtMC4xLTE4Mi43IDAtMTkuMiAwLjUtMzguNC0wLjEtNTcuNi0xLjMtNDIuMS0zMy42LTgwLjUtNzMuNC04NS45ek01OTcuOCAzMDUuMWMzMC4zIDIyLjggNTkgNDQuNCA4OS44IDY3LjZWMTY4LjlINTA5LjN2MjAzLjdjMzAuOS0yMy41IDU5LjEtNDUgODguNS02Ny41eiIgZmlsbD0iIzExOTVGRSIgcC1pZD0iMTM5MyI+PC9wYXRoPjxwYXRoIGQ9Ik02NTEuOSA3NjQuN0g0ODUuNGMtNC42IDAtOS4zIDAuMi0xMy45LTAuMS0xNS4xLTEuMS0yNS42LTguMS0yNS41LTI0LjMgMC4xLTE2LjIgMTAuNC0yMy41IDI1LjgtMjMuNyAyNy43LTAuMyA1NS41LTAuMSA4My4yLTAuMWgyNjMuNmM0LjYgMCA5LjMgMC4xIDEzLjkgMCAxNS43LTAuMSAyNS45IDcuMiAyNi4zIDIzLjEgMC41IDE3LjEtMTAuMiAyNS0yNi42IDI1LjEtNDMuNiAwLjItODcuMiAwLjEtMTMwLjggMC4xLTE2LjUtMC4xLTMzLTAuMS00OS41LTAuMXpNNjUxLjkgODkxLjZINDg1LjRjLTQuNiAwLTkuMyAwLjItMTMuOS0wLjEtMTUuMS0xLjEtMjUuNi04LjEtMjUuNS0yNC4zIDAuMS0xNi4yIDEwLjQtMjMuNSAyNS44LTIzLjcgMjcuNy0wLjMgNTUuNS0wLjEgODMuMi0wLjFoMjYzLjZjNC42IDAgOS4zIDAuMSAxMy45IDAgMTUuNy0wLjEgMjUuOSA3LjIgMjYuMyAyMy4xIDAuNSAxNy4xLTEwLjIgMjUtMjYuNiAyNS4xLTQzLjYgMC4yLTg3LjIgMC4xLTEzMC44IDAuMS0xNi41LTAuMS0zMy0wLjEtNDkuNS0wLjF6TTY1Mi4zIDYzOC4zYy01OC4yIDAtMTE2LjMgMC4xLTE3NC41IDAtMjEuNSAwLTMyLjEtOC0zMi4xLTIzLjUgMC0xNS45IDEwLjUtMjQuNyAzMS41LTI0LjcgMTE3LTAuMiAyMzMuOS0wLjIgMzUwLjkgMCAyMC42IDAgMzEuOSA5LjMgMzAuOCAyNS4xLTEuMyAxOC42LTEzLjQgMjMuNC0zMC4yIDIzLjMtNTguNy0wLjUtMTE3LjUtMC4yLTE3Ni40LTAuMnoiIGZpbGw9IiMxMTk1RkUiIHAtaWQ9IjEzOTQiPjwvcGF0aD48L3N2Zz4=">`)
-        } else if (item.type === 'browserpage') { // 浏览器快捷命令
-            $(liHtml).append(`<img class="jstart-type-icon" alt src="data:image/svg+xml;base64,PHN2ZyB0PSIxNjcwNTU4MTAzNDU0IiBjbGFzcz0iaWNvbiIgdmlld0JveD0iMCAwIDEwMjQgMTAyNCIgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHAtaWQ9IjU4NTkiIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCI+PHBhdGggZD0iTTk4MS4zMzMzMzMgNTU0LjY2NjY2N2gtODcuODUwNjY2YTM4MC41NDQgMzgwLjU0NCAwIDAgMS0yOS44NjY2NjcgMTEwLjkzMzMzM2w3Ni4wMzIgNDMuOTA0YTQyLjY2NjY2NyA0Mi42NjY2NjcgMCAxIDEtNDIuNjY2NjY3IDczLjg5ODY2N2wtNzYuMjg4LTQ0LjA3NDY2N2EzODUuOTYyNjY3IDM4NS45NjI2NjcgMCAwIDEtODEuMjggODEuMDY2NjY3bDQ0LjA3NDY2NyA3Ni4zMzA2NjZhNDIuNjY2NjY3IDQyLjY2NjY2NyAwIDEgMS03My44OTg2NjcgNDIuNjY2NjY3bC00My45MDQtNzYuMDc0NjY3YTM4MS4yNjkzMzMgMzgxLjI2OTMzMyAwIDAgMS0xMTEuMTQ2NjY2IDI5Ljg2NjY2N1Y5ODEuMzMzMzMzYTQyLjY2NjY2NyA0Mi42NjY2NjcgMCAwIDEtODUuMzMzMzM0IDB2LTg3Ljg1MDY2NmEzODEuMjY5MzMzIDM4MS4yNjkzMzMgMCAwIDEtMTExLjE0NjY2Ni0yOS44NjY2NjdsLTQzLjkwNCA3Ni4wNzQ2NjdhNDIuNjY2NjY3IDQyLjY2NjY2NyAwIDEgMS03My44OTg2NjctNDIuNjY2NjY3bDQ0LjA3NDY2Ny03Ni4zMzA2NjdhMzg1Ljk2MjY2NyAzODUuOTYyNjY3IDAgMCAxLTgxLjI4LTgxLjA2NjY2NmwtNzYuMjg4IDQ0LjA3NDY2NmE0Mi42NjY2NjcgNDIuNjY2NjY3IDAgMSAxLTQyLjY2NjY2Ny03My44OTg2NjZsNzYuMDMyLTQzLjkwNGEzODAuNTQ0IDM4MC41NDQgMCAwIDEtMjkuODY2NjY3LTExMC45MzMzMzRINDIuNjY2NjY3YTQyLjY2NjY2NyA0Mi42NjY2NjcgMCAxIDEgMC04NS4zMzMzMzNoODcuODUwNjY2YTM4MC41NDQgMzgwLjU0NCAwIDAgMSAyOS44NjY2NjctMTEwLjkzMzMzM0w4NC4zNTIgMzE0Ljc5NDY2N2E0Mi42NjY2NjcgNDIuNjY2NjY3IDAgMCAxIDQyLjY2NjY2Ny03My44OTg2NjdsNzYuMjg4IDQ0LjA3NDY2N2EzODUuOTYyNjY3IDM4NS45NjI2NjcgMCAwIDEgODEuMjgtODEuMDY2NjY3TDI0MC41MTIgMTI3LjU3MzMzM2E0Mi42NjY2NjcgNDIuNjY2NjY3IDAgMSAxIDczLjg5ODY2Ny00Mi42NjY2NjZsNDMuOTA0IDc2LjAzMmEzODEuMjY5MzMzIDM4MS4yNjkzMzMgMCAwIDEgMTExLjE0NjY2Ni0yOS44NjY2NjdWNDIuNjY2NjY3YTQyLjY2NjY2NyA0Mi42NjY2NjcgMCAwIDEgODUuMzMzMzM0IDB2ODcuODUwNjY2YTM4MS4yNjkzMzMgMzgxLjI2OTMzMyAwIDAgMSAxMTEuMTQ2NjY2IDI5Ljg2NjY2N2w0My45MDQtNzYuMDMyYTQyLjY2NjY2NyA0Mi42NjY2NjcgMCAwIDEgNzMuODk4NjY3IDQyLjY2NjY2N2wtNDQuMDc0NjY3IDc2LjMzMDY2NmEzODUuODM0NjY3IDM4NS44MzQ2NjcgMCAwIDEgODEuMjggODEuMDY2NjY3bDc2LjI4OC00NC4wNzQ2NjdhNDIuNjY2NjY3IDQyLjY2NjY2NyAwIDAgMSA0Mi42NjY2NjcgNzMuODk4NjY3TDg2My43NDQgMzU4LjRhMzgwLjU0NCAzODAuNTQ0IDAgMCAxIDI5Ljg2NjY2NyAxMTAuOTMzMzMzSDk4MS4zMzMzMzNhNDIuNjY2NjY3IDQyLjY2NjY2NyAwIDEgMSAwIDg1LjMzMzMzNHpNNTEyIDIxMy4zMzMzMzNhMjk4LjY2NjY2NyAyOTguNjY2NjY3IDAgMSAwIDI5OC42NjY2NjcgMjk4LjY2NjY2NyAyOTguNjY2NjY3IDI5OC42NjY2NjcgMCAwIDAtMjk4LjY2NjY2Ny0yOTguNjY2NjY3eiIgcC1pZD0iNTg2MCIgZmlsbD0iI2U2ZTZlNiI+PC9wYXRoPjxwYXRoIGQ9Ik04MTAuNjY2NjY3IDY4MS4wNDUzMzNhNDIuNjY2NjY3IDQyLjY2NjY2NyAwIDAgMS01OC4yODI2NjcgMTUuNjE2bC0yNDQuMTM4NjY3LTE0MC44TDI3Ni42OTMzMzMgNjc4LjRhNDQuNTg2NjY3IDQ0LjU4NjY2NyAwIDAgMS01OC4wMjY2NjYtMTQuMjkzMzMzIDM3LjI5MDY2NyAzNy4yOTA2NjcgMCAwIDEgMTUuNTMwNjY2LTUzLjI5MDY2N0w0NjkuMzMzMzMzIDQ4Ni40VjIxMy4zMzMzMzNhNDIuNjY2NjY3IDQyLjY2NjY2NyAwIDAgMSA4NS4zMzMzMzQgMHYyNzAuNjM0NjY3bDI0MC4zODQgMTM4Ljc5NDY2N0E0Mi42NjY2NjcgNDIuNjY2NjY3IDAgMCAxIDgxMC42NjY2NjcgNjgxLjA0NTMzM3oiIHAtaWQ9IjU4NjEiIGZpbGw9IiNlNmU2ZTYiPjwvcGF0aD48L3N2Zz4=">`)
-        }
-        $(suggestHtml).append(liHtml)
-    })
-    $("#j-search-view").append(suggestHtml)
-}
-
-// 匹配快捷命令：书签 设置 历史记录
-function addBookmarksInSuggest() {
-    let currentInput = getInputValue()
-    if (!currentInput) return null
-    const isQuickSearch  = currentInput.indexOf('/') === 0 || currentInput.indexOf('、') === 0
-    if (currentInput === '/' || currentInput === '、') { // 搜索书签快捷键
-        list = []
-        // 加载历史记录，按常用排序
-
-    } else if (currentInput.length > 1) {
-        let searchWord = currentInput.toLowerCase()
-        if (isQuickSearch) {
-            searchWord = searchWord.substr(1)
-        }
-        // 匹配浏览器快捷命令
-        let targetList = []
-        targetList = targetList.concat(jStartBrowserPage.filter(item => item['q'].toLowerCase().includes(searchWord)))
-        // 匹配书签
-        let targetBookmarks = jStartBookmarks.filter(bookmark => bookmark['title'].toLowerCase().includes(searchWord))
-        targetList = targetList.concat(targetBookmarks)
-        if (!isQuickSearch && targetList.length > 3) targetList = targetList.slice(0, 3) // 最多三个
-        return targetList
-    }
-    return null
-}
-
-// 隐藏联想view
-function removeSuggest() {
+function onInputChange() {
+    const text = getInputValue()
+    const inputVersion = ++jStartInputVersion
+    clearLoadingState()
     jStartSuggestSelectedIndex = -1
-    jStartSuggestList = []
-    $("#jstart-suggest-view").remove()
+    jStartEngineResults = []
+    jStartLocalResults = []
+
+    if (!text) {
+        removeSuggest()
+        return
+    }
+
+    if (!shouldBypassLocalResults(text)) {
+        requestLocalResults(text, inputVersion)
+    }
+
+    if (!text.startsWith('/')) {
+        chrome.runtime.sendMessage(chrome.runtime.id, {
+            type: jStartSearchType,
+            searchWord: text
+        }).catch(() => {})
+    }
+
+    renderSuggest()
 }
 
-// 获取当前的suggest选中结果
-function getSuggestSelected() {
-    if (!$("#jstart-suggest-view")) return null
-    if (jStartSuggestSelectedIndex < 0) return null
-    let item = jStartSuggestList[jStartSuggestSelectedIndex]
-    if (item.type === 'bookmark') {
-        return {type: 'url', value: item.url}
-    } else if (item.type === 'browserpage') {
-        return {type: 'url', value: item.url}
-    } else {
-        return {type: 'keyword', value: item.q}
+function requestLocalResults(text, inputVersion) {
+    chrome.runtime.sendMessage(chrome.runtime.id, {
+        type: 'jstart:searchLocal',
+        text
+    }).then(response => {
+        if (inputVersion !== jStartInputVersion) return
+        jStartLocalResults = response && response.results ? response.results : []
+        renderSuggest()
+    }).catch(() => {})
+}
+
+function shouldBypassLocalResults(text) {
+    return !text.startsWith('/') && /\s$/.test(text)
+}
+
+function renderSuggest() {
+    removeSuggest()
+    const showEngine = !getInputValue().startsWith('/') && jStartEngineResults.length > 0
+    const showLocal = jStartLocalResults.length > 0
+    if (!showEngine && !showLocal) return
+
+    const suggestHtml = $('<div class="jstart-suggest-view" id="jstart-suggest-view"></div>')
+    if (showLocal) {
+        appendSuggestSection(suggestHtml, getInputValue().startsWith('/') ? '命令与本地结果' : '其他', jStartLocalResults)
+    }
+    if (showEngine) {
+        appendSuggestSection(suggestHtml, '搜索建议', jStartEngineResults)
+    }
+
+    getJStartElement('j-search-view').appendChild(suggestHtml[0])
+    if (jStartSuggestSelectedIndex < 0 && showLocal) {
+        jStartSuggestSelectedIndex = 0
+    }
+    refreshSuggestHilight()
+}
+
+function appendSuggestSection(container, title, results) {
+    const header = $('<div class="jstart-suggest-section"></div>')
+    header.text(title)
+    container.append(header)
+
+    results.forEach(result => {
+        const globalIndex = getResultIndex(result)
+        const item = $('<button type="button" class="jstart-suggest-view-item"></button>')
+        item.attr('data-index', globalIndex)
+        item.append(createTypeIcon(result.type))
+
+        const content = $('<span class="jstart-suggest-content"></span>')
+        const titleNode = $('<span class="jstart-suggest-title"></span>')
+        const subtitleNode = $('<span class="jstart-suggest-subtitle"></span>')
+        const isLoading = result.id === jStartLoadingResultId
+        titleNode.text(result.title || '')
+        subtitleNode.text(isLoading ? `正在打开 ${jStartLoadingUrl || getResultTargetUrl(result) || result.title || ''}` : result.subtitle || TYPE_LABELS[result.type] || '')
+        content.append(titleNode)
+        content.append(subtitleNode)
+        item.append(content)
+        item.toggleClass('jstart-loading-result', isLoading)
+
+        const tag = $('<span class="jstart-suggest-tag"></span>')
+        tag.text(TYPE_LABELS[result.type] || '其他')
+        item.append(tag)
+
+        item.on('mouseenter', function () {
+            jStartSuggestSelectedIndex = Number($(this).attr('data-index'))
+            refreshSuggestHilight()
+        })
+        item.on('click', function () {
+            jStartSuggestSelectedIndex = Number($(this).attr('data-index'))
+            const selected = getSuggestSelected()
+            if (selected) executeSuggestResult(selected, false)
+        })
+
+        container.append(item)
+    })
+}
+
+function handleBackdropClick(event) {
+    if (event.target && event.target.id === 'jstart-content-view') {
+        removeHTML()
     }
 }
 
-// 点击suggest 
-function suggestClick(index) {
-    jStartSuggestSelectedIndex = index
-    suggestJump()
+function getResultIndex(result) {
+    return getSelectableResults().findIndex(item => item.id === result.id)
 }
 
-function suggestJump() {
-    const suggestContent = getSuggestSelected()
-    handleResult(suggestContent.type, suggestContent.value)
+function createTypeIcon(type) {
+    const icon = $('<span class="jstart-type-icon"></span>')
+    icon.addClass(`jstart-type-icon-${type}`)
+    icon.html(getIconSvg(type))
+    return icon
 }
 
-// 切换搜索结果
+function getIconSvg(type) {
+    const icons = {
+        engine: '<svg viewBox="0 0 24 24"><path d="M10.8 18a7.2 7.2 0 1 1 5.1-2.1l4.1 4.1-1.6 1.6-4.1-4.1A7.1 7.1 0 0 1 10.8 18Zm0-2.2a5 5 0 1 0 0-10.1 5 5 0 0 0 0 10.1Z"/></svg>',
+        bookmark: '<svg viewBox="0 0 24 24"><path d="M6 3.8c0-1 .8-1.8 1.8-1.8h8.4c1 0 1.8.8 1.8 1.8v18L12 18l-6 3.8v-18Z"/></svg>',
+        tab: '<svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 18.5v-13Zm2.5-.3a.3.3 0 0 0-.3.3v3.2h11.6V5.5a.3.3 0 0 0-.3-.3h-11Zm-.3 5.7v7.6c0 .2.1.3.3.3h11c.2 0 .3-.1.3-.3v-7.6H6.2Z"/></svg>',
+        history: '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 1-8.3 5.5H1.8V6h5.8v5.8H5.1V10A6.7 6.7 0 1 0 12 5.3V3Zm1.1 4.5v4.1l3.4 2-.9 1.8-4.7-2.8V7.5h2.2Z"/></svg>',
+        command: '<svg viewBox="0 0 24 24"><path d="M13.8 2 4.5 13.1h6.2L9.7 22l9.8-12.2h-6.3L13.8 2Z"/></svg>'
+    }
+    return icons[type] || icons.command
+}
+
+function removeSuggest() {
+    const suggest = getJStartElement('jstart-suggest-view')
+    if (suggest) suggest.remove()
+}
+
+function getSelectableResults() {
+    return jStartLocalResults.concat(jStartEngineResults)
+}
+
+function getSuggestSelected() {
+    const list = getSelectableResults()
+    if (jStartSuggestSelectedIndex < 0 || jStartSuggestSelectedIndex >= list.length) return null
+    return list[jStartSuggestSelectedIndex]
+}
+
 function changeSuggestResult(keyCode) {
-    if (!$("#jstart-suggest-view")) return
+    const list = getSelectableResults()
+    if (!list.length) return
+
     const upKey = keyCode == 38
     if (upKey) {
         if (jStartSuggestSelectedIndex > 0) jStartSuggestSelectedIndex--
-        else jStartSuggestSelectedIndex = jStartSuggestList.length - 1
+        else jStartSuggestSelectedIndex = list.length - 1
     } else {
-        if (jStartSuggestList.length > jStartSuggestSelectedIndex + 1) jStartSuggestSelectedIndex++
+        if (list.length > jStartSuggestSelectedIndex + 1) jStartSuggestSelectedIndex++
         else jStartSuggestSelectedIndex = 0
     }
     refreshSuggestHilight()
 }
 
-// 刷新高亮状态
 function refreshSuggestHilight() {
-    $(".jstart-suggest-view-item").each((index, ele) => {
-        if (index === jStartSuggestSelectedIndex) {
+    getJStartElements('.jstart-suggest-view-item').forEach(ele => {
+        const itemIndex = Number($(ele).attr('data-index'))
+        if (itemIndex === jStartSuggestSelectedIndex) {
             $(ele).addClass('jstart-selected')
+            ele.scrollIntoView({
+                block: 'nearest'
+            })
         } else {
             $(ele).removeClass('jstart-selected')
         }
     })
 }
 
-// 切换搜索平台
-function changeSearchType(event) {
-    // console.log('dianjile logo ')
-    jStartSearchType = (jStartSearchType === 'google') ? 'baidu' : 'google'
-    chrome.storage.local.set({ "jStartSearchType": jStartSearchType }, function () { });
+function changeSearchType() {
+    if (jStartSearchType === 'google') {
+        jStartSearchType = 'baidu'
+    } else if (jStartSearchType === 'baidu') {
+        jStartSearchType = 'bing'
+    } else {
+        jStartSearchType = 'google'
+    }
+    chrome.storage.local.set({ jStartSearchType })
     refreshLogo()
-    focusOnSearch()
-    // event.stopPropagation()
-    onInputChange() // 触发搜索关键词请求
+    if (getInputValue() && !getInputValue().startsWith('/')) onInputChange()
 }
 
-// 获取输入内容
 function getInputValue() {
-    let inputE = document.getElementById('j-input-view-input');
+    const inputE = getJStartElement('j-input-view-input')
     if (inputE) return inputE.value
     return ''
 }
 
-// 刷新搜索平台logo
 function refreshLogo() {
-    const googleLogo = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgNDggNDgiPjxkZWZzPjxwYXRoIGlkPSJhIiBkPSJNNDQuNSAyMEgyNHY4LjVoMTEuOEMzNC43IDMzLjkgMzAuMSAzNyAyNCAzN2MtNy4yIDAtMTMtNS44LTEzLTEzczUuOC0xMyAxMy0xM2MzLjEgMCA1LjkgMS4xIDguMSAyLjlsNi40LTYuNEMzNC42IDQuMSAyOS42IDIgMjQgMiAxMS44IDIgMiAxMS44IDIgMjRzOS44IDIyIDIyIDIyYzExIDAgMjEtOCAyMS0yMiAwLTEuMy0uMi0yLjctLjUtNHoiLz48L2RlZnM+PGNsaXBQYXRoIGlkPSJiIj48dXNlIHhsaW5rOmhyZWY9IiNhIiBvdmVyZmxvdz0idmlzaWJsZSIvPjwvY2xpcFBhdGg+PHBhdGggY2xpcC1wYXRoPSJ1cmwoI2IpIiBmaWxsPSIjRkJCQzA1IiBkPSJNMCAzN1YxMWwxNyAxM3oiLz48cGF0aCBjbGlwLXBhdGg9InVybCgjYikiIGZpbGw9IiNFQTQzMzUiIGQ9Ik0wIDExbDE3IDEzIDctNi4xTDQ4IDE0VjBIMHoiLz48cGF0aCBjbGlwLXBhdGg9InVybCgjYikiIGZpbGw9IiMzNEE4NTMiIGQ9Ik0wIDM3bDMwLTIzIDcuOSAxTDQ4IDB2NDhIMHoiLz48cGF0aCBjbGlwLXBhdGg9InVybCgjYikiIGZpbGw9IiM0Mjg1RjQiIGQ9Ik00OCA0OEwxNyAyNGwtNC0zIDM1LTEweiIvPjwvc3ZnPg=="
-    const baiduLogo = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgZmlsbD0iI2ZmZiI+PHBhdGggZD0iTTExLjUxOCAzMy43MjRjNi45NTctMS40OTUgNi4wMTItOS44IDUuODAyLTExLjYzLS4zNDItMi44MDMtMy42MzgtNy43LTguMTEzLTcuMzEzLTUuNjMuNTA1LTYuNDU0IDguNjQtNi40NTQgOC42NC0uNzUzIDMuNzYzIDEuODIzIDExLjggOC43NjUgMTAuMzAzem0xMi45MTctMTMuOTQ3YzMuODQyIDAgNi45NDgtNC40MjMgNi45NDgtOS44OTJDMzEuMzgzIDQuNDIyIDI4LjI3NyAwIDI0LjQzNSAwcy02Ljk1MiA0LjQyMi02Ljk1MiA5Ljg4NWMwIDUuNDcgMy4xMTQgOS44OTIgNi45NTIgOS44OTJ6bTE2LjU1LjY1M2M1LjEzOC42NjcgOC40NC00LjgxNSA5LjA5Ny04Ljk3LjY3LTQuMTUtMi42NDQtOC45Ny02LjI4LTkuNzk4LTMuNjQ1LS44MzUtOC4xOTUgNS4wMDItOC42IDguODA4LS40OTYgNC42NTMuNjY2IDkuMyA1Ljc5MyA5Ljk2em0yMC4zNjMgNi45NzdjMC0xLjk4Ny0xLjY1LTcuOTc0LTcuNzc1LTcuOTc0LTYuMTM3IDAtNi45NTQgNS42NS02Ljk1NCA5LjY0MyAwIDMuODEyLjMyIDkuMTMyIDcuOTQgOC45NjNzNi43ODctOC42MzMgNi43ODctMTAuNjMzek0xOC45MDYgNDguMmMtLjIwMy41ODUtLjY2IDIuMDgtLjI2NSAzLjM4Mi4zMyAxLjYyNiAxLjY2NyAyLjg1NyAzLjMxNCAzLjA1MkgyNS42di04LjkwOGgtMy45MDJhNC4yOCA0LjI4IDAgMCAwLTIuNzkxIDIuNDczem0zNC42NjgtMy4zMzRzLTcuOTQ4LTYuMTQ4LTEyLjU4OC0xMi43OTVjLTYuMjg4LTkuOC0xNS4yMjQtNS44LTE4LjIxMi0uODI4LTIuOTc1IDQuOTgzLTcuNjEyIDguMTM1LTguMjcyIDguOTctLjY2Ni44MjItOS42IDUuNjQzLTcuNjE1IDE0LjQ1MiAxLjk4IDguODAyIDguOTQ1IDguNjMzIDguOTQ1IDguNjMzYTM5LjA0IDM5LjA0IDAgMCAwIDExLjA4OC0uODI4IDIzLjM5IDIzLjM5IDAgMCAxIDExLjA4NS4zM3MxMy45MTMgNC42NiAxNy43Mi00LjMxMi0yLjE1LTEzLjYyMi0yLjE1LTEzLjYyMnptLTIzLjgwNyAxMy4zNWgtOS4wNDVjLTMuOTA1LS43NzgtNS40NjItMy40NDQtNS42Ni0zLjktLjE5Mi0uNDYtMS4yOTgtMi42MDMtLjcxMy02LjI0OCAxLjY4OC01LjQ2MyA2LjUwNC01Ljg1NSA2LjUwNC01Ljg1NWg0LjgxNHYtNS45MThsNC4xLjA2MnptMTYuODQ2LS4wNjJoLTEwLjRDMzIuMTggNTcuMTE0IDMyIDU0LjI0OCAzMiA1NC4yNDh2LTExLjVsNC4yMjMtLjA2OHYxMC4zNDdjLjI1OCAxLjEwMyAxLjYzIDEuMyAxLjYzIDEuM2g0LjN2LTExLjU4aDQuNXoiLz48L3N2Zz4="
-    const theLogo = (jStartSearchType === 'google') ? googleLogo : baiduLogo
-    $(".j-logo-view-div-img").attr("src", theLogo)
+    const logo = getJStartElement('j-logo-view-logo')
+    if (!logo) return
+    logo.src = SEARCH_LOGOS[jStartSearchType]
+    logo.title = jStartSearchType
 }
 
-// 输入框获得焦点
+function revealAfterStyleLoaded() {
+    const stylesheet = jStartRoot && jStartRoot.querySelector('link[rel="stylesheet"]')
+    let revealed = false
+    const reveal = () => {
+        if (revealed || !jStartHost) return
+        revealed = true
+        jStartHost.style.visibility = 'visible'
+        focusOnSearch()
+    }
+
+    if (!stylesheet) {
+        reveal()
+        return
+    }
+
+    stylesheet.addEventListener('load', reveal, { once: true })
+    stylesheet.addEventListener('error', reveal, { once: true })
+    setTimeout(reveal, 120)
+}
+
 function focusOnSearch() {
-    let input = document.getElementsByClassName('j-input-view-input')[0];
-    if (input) {
-        input.focus()
+    const input = getJStartElement('j-input-view-input')
+    if (!input) return
+    input.focus({ preventScroll: true })
+}
+
+function handleJStartKeydown(event) {
+    if (isImeComposing(event)) return
+    const handled = runJStartKeyAction(event)
+    event.stopPropagation()
+    if (handled) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
     }
 }
 
-function onInputChange(e) {
-    const text = getInputValue()
-    if (!text) {
-        removeSuggest() // 清空联想词显示
-        return
-    } else if (text.indexOf('/') === 0 || text.indexOf('、') === 0) {
-        showSuggest([]) // 快捷键: 快捷操作：书签，设置页面
-        return
-    } else {
-        showSuggest([]) // 先展示本地匹配，等待网络搜索回来
+function isImeComposing(event) {
+    return jStartIsComposing || event.isComposing || event.keyCode === 229
+}
+
+function addPageShortcutBlockers() {
+    document.addEventListener('keydown', blockPageShortcut, true)
+    document.addEventListener('keypress', blockPageShortcut, true)
+    document.addEventListener('keyup', blockPageShortcut, true)
+}
+
+function removePageShortcutBlockers() {
+    document.removeEventListener('keydown', blockPageShortcut, true)
+    document.removeEventListener('keypress', blockPageShortcut, true)
+    document.removeEventListener('keyup', blockPageShortcut, true)
+}
+
+function blockPageShortcut(event) {
+    if (!jStrartActived) return
+    if (!isJStartInputActive()) return
+    if (event.type === 'keydown' && isJStartControlKey(event) && !isImeComposing(event)) return
+
+    event.stopImmediatePropagation()
+}
+
+function isJStartInputActive() {
+    const input = getJStartElement('j-input-view-input')
+    if (!input) return false
+    return getDeepActiveElement() === input
+}
+
+function getDeepActiveElement(root = document) {
+    const active = root.activeElement
+    if (active && active.shadowRoot) return getDeepActiveElement(active.shadowRoot)
+    return active
+}
+
+function isJStartControlKey(event) {
+    return event.key === 'Enter' ||
+        event.key === 'Tab' ||
+        event.key === 'Escape' ||
+        event.key === 'ArrowDown' ||
+        event.key === 'ArrowUp'
+}
+
+function runJStartKeyAction(event) {
+    if (event.key === 'Enter') {
+        submitCurrentInput(event.metaKey || event.ctrlKey)
+        return true
     }
-    const sendDic = { type: jStartSearchType, searchWord: text }
-    chrome.runtime.sendMessage(chrome.runtime.id, sendDic).then((response) => {
-    });
+    if (event.key === 'Escape') {
+        removeHTML()
+        return true
+    }
+    if (event.key === 'Tab') {
+        if (getSelectableResults().length) changeSuggestResult(event.shiftKey ? 38 : 40)
+        else changeSearchType()
+        return true
+    }
+    if (event.key === 'ArrowDown') {
+        changeSuggestResult(40)
+        return true
+    }
+    if (event.key === 'ArrowUp') {
+        changeSuggestResult(38)
+        return true
+    }
+    if (event.key === '/') {
+        if (event.metaKey || event.ctrlKey || event.altKey) return false
+        insertSlashFromKeyEvent(event)
+        return true
+    }
+
+    return false
+}
+
+function insertSlashFromKeyEvent(event) {
+    const input = getJStartElement('j-input-view-input')
+    if (!input) return
+    insertTextAtCursor(input, '/')
+}
+
+function insertTextAtCursor(input, text) {
+    const start = input.selectionStart || 0
+    const end = input.selectionEnd || start
+    input.value = `${input.value.slice(0, start)}${text}${input.value.slice(end)}`
+    const cursor = start + text.length
+    input.setSelectionRange(cursor, cursor)
+    input.dispatchEvent(new InputEvent('input', {
+        bubbles: true,
+        inputType: 'insertText',
+        data: text
+    }))
+}
+
+function getJStartElement(id) {
+    if (!jStartRoot) return null
+    return jStartRoot.getElementById(id)
+}
+
+function getJStartElements(selector) {
+    if (!jStartRoot) return []
+    return Array.from(jStartRoot.querySelectorAll(selector))
 }
 
 function debounce(callback, delay = 800) {
-    let timer = null;
+    let timer = null
     return function () {
-        let self = this;
-        let args = arguments;
+        const self = this
+        const args = arguments
         timer && clearTimeout(timer)
         timer = setTimeout(function () {
-            // apply: 作用就是改变方法内部this的指向, 并能将参数传递给该方法, 最后立即执行这个函数
             callback.apply(self, args)
-        }, delay);
+        }, delay)
     }
 }
 
 function getstr() {
     return `
-    <div id="jstart-content-view" class="jstart-content-view" >
+    <div id="jstart-content-view" class="jstart-content-view">
       <div class="j-search-view" id="j-search-view">
           <div class="j-search-content" id="j-search-content">
-
               <div class="j-search-icon-view">
-                  <div class="j-search-icon-view-span-view">
-                      <span class="j-search-icon-view-span" style="height:20px;line-height:20px;width:20px">
-                          <svg focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                              <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"></path>
-                          </svg>
-                      </span>
-                  </div>
+                  <span class="j-search-icon-view-span">
+                      <svg focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                          <path d="M10.8 18a7.2 7.2 0 1 1 5.1-2.1l4.1 4.1-1.6 1.6-4.1-4.1A7.1 7.1 0 0 1 10.8 18Zm0-2.2a5 5 0 1 0 0-10.1 5 5 0 0 0 0 10.1Z"></path>
+                      </svg>
+                  </span>
               </div>
-
-              <div class="a4bIc j-input-view">
-                  <style data-iml="1669015554577">.gLFyf-j{background-color:transparent;border:none;margin:0;padding:0;color:#e8eaed;word-wrap:break-word;outline:none;display:flex;flex:100%;-webkit-tap-highlight-color:transparent;margin-top:-37px;height:34px;font-size:16px;}.minidiv .gLFyf-j{margin-top:-35px;}.a4bIc{display:flex;flex:1;flex-wrap:wrap}.YacQv-j{color:transparent;flex:100%;white-space:pre;height:34px;font-size:16px;}.YacQv-j span{background:url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAECAYAAAC3OK7NAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAFhJREFUeNpiZACCL93NCkAqAYgv8JTWbkAT2wAUu8AIFDAAcvaDBIA4AIgLQRqgYgeA2AGIHZmgAoVAXYkgASDuB+LzULFAqMb9ICtApqAAoJgAGj8AIMAAwSMfC4GFoWEAAAAASUVORK5CYII=") repeat-x scroll 0 100% transparent;padding:0 0 10px 0;}</style>
-                  <div class="YacQv-j" jsname="vdLsw"></div>
-                  <input class="j-input-view-input gLFyf-j" id="j-input-view-input" maxlength="2048" name="q" type="text" aria-autocomplete="both" aria-haspopup="false" autocapitalize="off" autocomplete="off" autocorrect="off" autofocus role="combobox" spellcheck="false" title="Google 搜索" value="" aria-label="搜索">
+              <div class="j-input-view">
+                  <input class="j-input-view-input" id="j-input-view-input" maxlength="2048" name="q" type="text" autocapitalize="off" autocomplete="off" autocorrect="off" role="combobox" spellcheck="false" aria-label="搜索">
               </div>
-
-              <div class="j-logo-view dRYYxd-j">
-                  <style>
-                      .dRYYxd-j{display:flex;flex:0 0 auto;margin-top:-5px;align-items:stretch;flex-direction:row}.minidiv .dRYYxd-j{margin-top:0}
-                  </style>
-                  <style>
-                      .nDcEnd-j{flex:1 0 auto;display:flex;cursor:pointer;align-items:center;border:0;background:transparent;outline:none;line-height:44px}.Gdd5U-j{height:20px;width:20px;vertical-align:middle}.minidiv .nDcEnd-j{line-height:32px}.minidiv .Gdd5U-j{width:20px;height:20px}
-                  </style>
-                  <div class="j-logo-view-div nDcEnd-j" aria-label="切换搜索平台" role="button" tabindex="0">
-                      <img class="j-logo-view-div-img Gdd5U-j" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgNDggNDgiPjxkZWZzPjxwYXRoIGlkPSJhIiBkPSJNNDQuNSAyMEgyNHY4LjVoMTEuOEMzNC43IDMzLjkgMzAuMSAzNyAyNCAzN2MtNy4yIDAtMTMtNS44LTEzLTEzczUuOC0xMyAxMy0xM2MzLjEgMCA1LjkgMS4xIDguMSAyLjlsNi40LTYuNEMzNC42IDQuMSAyOS42IDIgMjQgMiAxMS44IDIgMiAxMS44IDIgMjRzOS44IDIyIDIyIDIyYzExIDAgMjEtOCAyMS0yMiAwLTEuMy0uMi0yLjctLjUtNHoiLz48L2RlZnM+PGNsaXBQYXRoIGlkPSJiIj48dXNlIHhsaW5rOmhyZWY9IiNhIiBvdmVyZmxvdz0idmlzaWJsZSIvPjwvY2xpcFBhdGg+PHBhdGggY2xpcC1wYXRoPSJ1cmwoI2IpIiBmaWxsPSIjRkJCQzA1IiBkPSJNMCAzN1YxMWwxNyAxM3oiLz48cGF0aCBjbGlwLXBhdGg9InVybCgjYikiIGZpbGw9IiNFQTQzMzUiIGQ9Ik0wIDExbDE3IDEzIDctNi4xTDQ4IDE0VjBIMHoiLz48cGF0aCBjbGlwLXBhdGg9InVybCgjYikiIGZpbGw9IiMzNEE4NTMiIGQ9Ik0wIDM3bDMwLTIzIDcuOSAxTDQ4IDB2NDhIMHoiLz48cGF0aCBjbGlwLXBhdGg9InVybCgjYikiIGZpbGw9IiM0Mjg1RjQiIGQ9Ik00OCA0OEwxNyAyNGwtNC0zIDM1LTEweiIvPjwvc3ZnPg==" alt="拍照搜索" data-iml="1669015554578" data-atf="1" data-frt="0">
-                  </div>
+              <div class="j-logo-view">
+                  <button class="j-logo-view-div" id="j-logo-view-button" aria-label="切换搜索平台" type="button">
+                      <img class="j-logo-view-div-img" id="j-logo-view-logo" src="${SEARCH_LOGOS.google}" alt="">
+                  </button>
               </div>
-
           </div>
       </div>
     </div>
   `
 }
 
-// newTab 逻辑
 const envMeta = document.getElementsByTagName('meta')['newtab-jstart-flag']
 jStarttabStart = envMeta && envMeta.content && envMeta.content === 'true'
 if (jStarttabStart) {
-    console.log('content js : new tab start ~~')
     $(document).ready(function () {
         showMainView()
-        // 向background.js请求书签信息
-        const sendDic = { type: 'contentJsLoadInNewTab' }
-        chrome.runtime.sendMessage(chrome.runtime.id, sendDic).then((response) => {
-        });
-        // 显示起始页动画
-        // $("#jstart-curveWrap").css("opacity", "0.5");
-        $("#jstart-curveWrap").fadeTo("fast", 0.5)
-    });
-    window.onload = function () {
-        if (location.search !== "?x") { // 自动获得焦点
-            // location.search = "?x";
-            // throw new Error;  
-        }
-        focusOnSearch()
-    }
+        $('#jstart-curveWrap').css('opacity', '0.5')
+    })
 }

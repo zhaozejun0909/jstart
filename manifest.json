@@ -1,13 +1,13 @@
 {
     "manifest_version": 3,
     "name": "JStart",
-    "description": "search and newtab page",
+    "description": "自定义主页：支持百度、谷歌、必应搜索，也支持浏览器书签搜索，支持任意页面点击插件图标或者快捷键 Ctrl+J 调出插件页面，Tab键切换搜索，回车键搜索，CMD+回车在新的tab页打开选中结果",
     "version": "1.0.0",
     "icons": {
-        "16": "logo.png",
-        "32": "logo.png",
-        "48": "logo.png",
-        "128": "logo.png"
+        "16": "logo-16.png",
+        "32": "logo-32.png",
+        "48": "logo-48.png",
+        "128": "logo-128.png"
     },
     "background": {
         "service_worker": "/background.js",
@@ -16,7 +16,7 @@
     "action": {
         "default_title": "显示jstart页面",
         "default_icon": {            
-            "32": "logo.png" 
+            "32": "logo-128.png" 
         }
     },
     "content_scripts": [
@@ -27,25 +27,39 @@
             "js": [
                 "jquery-3.6.1.slim.min.js",
                 "/content.js"
-            ],
-            "css": [
-                "jstart.css"
             ]
         }
     ],
     "chrome_url_overrides" : {
-        "newtab": "newtab.html"
+        "newtab": "redirect.html"
     },
+    "options_page": "options.html",
     "permissions": [
         "storage",
         "tabs",
-        "bookmarks"
+        "bookmarks",
+        "history"
+    ],
+    "host_permissions": [
+        "https://www.baidu.com/*",
+        "https://suggestqueries.google.com/*",
+        "https://api.bing.com/*"
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "jstart.css"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
     ],
     "commands": {
         "command-home": {
             "suggested_key": {
                 "default": "Ctrl+Shift+J",
-                "mac": "Ctrl+J"
+                "mac": "Command+J"
             },
             "description": "加载首页快捷键"
         },
@@ -55,6 +69,13 @@
                 "mac": "Ctrl+N"
             },
             "description": "在新的tab页面打开搜索结果"
+        },
+        "command-toggle-previous-tab": {
+            "suggested_key": {
+                "default": "Ctrl+Shift+Left",
+                "mac": "MacCtrl+Command+Left"
+            },
+            "description": "切换到上一个tab页面"
         }
     }
 }

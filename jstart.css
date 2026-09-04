@@ -1,139 +1,278 @@
 .jstart-content-view {
-	position: fixed;
-	z-index: 999999;
-	top: 0;
-	left: 0;
-	width: 100vw;
-	height: 100vh;
-	background: rgba(0, 0, 0, .7);
-	-webkit-backdrop-filter: blur(30px);
-	backdrop-filter: blur(30px);
-	font-size: 14px;
-	display: none;
+    position: fixed;
+    z-index: 999999;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, .7);
+    display: none;
+    font-family: Avenir, Helvetica, Arial, sans-serif;
+    color: #e8eaed;
 }
 
 .jstart-content-view > .j-search-view {
-	display: flex;
+    display: flex;
     flex-wrap: wrap;
-    z-index: 3;
-    min-height: 44px;
-    border: 1px solid #5f6368;
-    box-shadow: none;
-    border-radius: 4px;
+    width: min(680px, calc(100vw - 32px));
+    min-height: 46px;
     margin: 35vh auto auto auto;
-    width: calc(632px + 6px);
-    width: auto;
-    max-width: 584px;
+    overflow: hidden;
+    border: 1px solid #5f6368;
+    border-radius: 8px;
+    background: rgba(16, 18, 22, .72);
+    box-shadow: 0 18px 60px rgba(0, 0, 0, .28);
 }
 
 .jstart-content-view > .j-search-view > .j-search-content {
-	/* 搜索框 */
-	flex: 1;
     display: flex;
-    flex-wrap: wrap;
-    padding: 5px 14px 0 14px;
-    height: 44px;
+    align-items: center;
+    width: 100%;
+    min-height: 46px;
+    padding: 0 12px;
     box-sizing: border-box;
 }
 
-.jstart-content-view > .j-search-view > .j-search-content >.j-search-icon-view {
-	/* 搜索框 > 搜索iconview */
-	display: flex;
+.j-search-icon-view {
+    display: flex;
     align-items: center;
-    padding-right: 10px;
-    margin-top: -5px;
-}
-
-.jstart-content-view > .j-search-view > .j-search-content >.j-search-icon-view .j-search-icon-view-span {
-	/* 搜索框 > 搜索iconview > span */
-	margin-top: 5px;
+    flex: 0 0 28px;
     color: #9aa0a6;
-	display: inline-block;
-    fill: currentColor;
-    position: relative;
 }
 
-.jstart-content-view >.j-search-view > .j-search-content >.j-search-icon-view .j-search-icon-view-span >svg {
-	/* 搜索框 > 搜索iconview > span > svg */
-	display: block;
-    height: 100%;
+.j-search-icon-view-span,
+.j-search-icon-view-span svg {
+    display: block;
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+}
+
+.j-input-view {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.j-input-view-input {
     width: 100%;
-    line-height: 20px;
-    fill: currentColor;
-    font-size: 14px;
-}
-
-.j-search-content >.j-input-view {
-	/* 输入框view */
-}
-
-.j-search-content >.j-input-view >.j-input-view-input {
-	/* 输入框view */
-	text-align: left;
-    border: none;
-    box-shadow: none;
-    cursor: auto;
-    padding: 0;
-    border-radius: 0;
-    text-transform: none;
+    height: 44px;
+    border: 0;
+    outline: 0;
+    background: transparent;
     color: #e8eaed;
     font-size: 16px;
+    line-height: 44px;
 }
 
 .j-logo-view {
-	/* 右边搜索logo */
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
 }
 
-.j-logo-view >.j-logo-view-div {
-	/* 右边搜索logo > div */
+.j-logo-view-div {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
 }
 
-.j-logo-view >.j-logo-view-div >..j-logo-view-div-img {
-	/* 右边搜索logo > div > img */
+.j-logo-view-div:hover {
+    background: rgba(255, 255, 255, .08);
 }
 
+.j-logo-view-div-img {
+    width: 20px;
+    height: 20px;
+}
 
-.j-search-view >.jstart-suggest-view {
+.j-search-view > .jstart-suggest-view {
     width: 100%;
-    text-align: left;
-    color: aliceblue;
-    font-size: 14px;
-    padding-bottom: 6px;
-}
-
-.j-search-view >.jstart-suggest-view >.jstart-suggest-view-line {
-    height: 8px;
-    margin: 0 13px;
-    border-top: 1px solid #5f6368;
-    opacity: 0.5;
-}
-
-.j-search-view >.jstart-suggest-view >li {
-    height: 40px;
-    line-height: 40px;
-    border-radius: 3px; 
-    overflow: hidden;
-    list-style-type:none;
-    margin: 0 10px;
-    padding: 0 5px;
+    max-height: min(460px, calc(100vh - 140px));
+    overflow-y: auto;
+    padding: 0 8px 8px 8px;
+    box-sizing: border-box;
     color: #e8eaed;
+    scrollbar-color: rgba(255, 255, 255, .22) transparent;
+    scrollbar-width: thin;
+}
+
+.j-search-view > .jstart-suggest-view::-webkit-scrollbar {
+    width: 8px;
+}
+
+.j-search-view > .jstart-suggest-view::-webkit-scrollbar-thumb {
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .22);
+}
+
+.jstart-suggest-section {
+    padding: 10px 10px 6px 10px;
+    border-top: 1px solid rgba(95, 99, 104, .65);
+    color: #9aa0a6;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0;
+}
+
+.jstart-suggest-view-item {
+    display: grid;
+    position: relative;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 10px;
+    width: 100%;
+    min-height: 44px;
+    margin: 0;
+    padding: 5px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.jstart-suggest-view-item:hover,
+.jstart-suggest-view-item.jstart-selected {
+    background: rgba(255, 255, 255, .09);
+}
+
+.jstart-suggest-view-item > * {
+    position: relative;
+    z-index: 1;
+}
+
+.jstart-suggest-view-item.jstart-loading-result {
+    background: rgba(138, 180, 248, .08);
+}
+
+.jstart-suggest-view-item.jstart-loading-result::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: linear-gradient(90deg, transparent, rgba(138, 180, 248, .2), transparent);
+    transform: translateX(-100%);
+    animation: jstart-loading-row 1150ms ease-in-out infinite;
+}
+
+.jstart-suggest-view-item.jstart-loading-result .jstart-suggest-subtitle {
+    color: #c8d9fb;
+}
+
+.jstart-type-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    color: #e8eaed;
+    background: rgba(255, 255, 255, .1);
+}
+
+.jstart-type-icon svg {
+    width: 15px;
+    height: 15px;
+    fill: currentColor;
+}
+
+.jstart-type-icon-engine {
+    color: #8ab4f8;
+}
+
+.jstart-type-icon-bookmark {
+    color: #fdd663;
+}
+
+.jstart-type-icon-tab {
+    color: #81c995;
+}
+
+.jstart-type-icon-history {
+    color: #c58af9;
+}
+
+.jstart-type-icon-command {
+    color: #ffb86c;
+}
+
+.jstart-suggest-content {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 2px;
+}
+
+.jstart-suggest-title,
+.jstart-suggest-subtitle {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.jstart-suggest-title {
+    color: #f1f3f4;
     font-size: 14px;
-    font-weight: normal;
+    line-height: 18px;
 }
 
-.j-search-view >.jstart-suggest-view >li.jstart-hover:hover {
-    background-color: rgba(0, 0, 0, .3);
-    color: antiquewhite;
+.jstart-suggest-subtitle {
+    color: #9aa0a6;
+    font-size: 12px;
+    line-height: 16px;
 }
 
-.j-search-view >.jstart-suggest-view >li.jstart-selected {
-    background-color: rgba(0, 0, 0, .3);
-    color: antiquewhite;
+.jstart-suggest-tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 42px;
+    height: 22px;
+    padding: 0 7px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, .08);
+    color: #bdc1c6;
+    font-size: 11px;
+    line-height: 22px;
+    box-sizing: border-box;
 }
 
-.j-search-view >.jstart-suggest-view >li >.jstart-type-icon {
-    width: 26px;
-    height: 26px;
-    float: right;
-    margin-top: 7px;
+@keyframes jstart-loading-row {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    55% {
+        transform: translateX(0);
+    }
+
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+@media (max-width: 640px) {
+    .jstart-content-view > .j-search-view {
+        margin-top: 24vh;
+    }
+
+    .jstart-suggest-view-item {
+        grid-template-columns: 28px minmax(0, 1fr);
+    }
+
+    .jstart-suggest-tag {
+        display: none;
+    }
 }
