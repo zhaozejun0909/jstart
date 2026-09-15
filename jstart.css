@@ -1,74 +1,201 @@
 .jstart-content-view {
+    --jstart-overlay: rgba(5, 3, 14, .12);
+    --jstart-glass: rgba(255, 255, 255, .035);
+    --jstart-border: rgba(255, 255, 255, .08);
+    --jstart-divider: rgba(255, 255, 255, .09);
     position: fixed;
     z-index: 999999;
     top: 0;
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(0, 0, 0, .7);
+    overflow-y: auto;
+    background: var(--jstart-overlay);
     display: none;
-    font-family: Avenir, Helvetica, Arial, sans-serif;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
     color: #e8eaed;
 }
 
+.jstart-content-view[data-surface="webpage"] {
+    --jstart-overlay: rgba(5, 3, 14, .68);
+}
+
 .jstart-content-view > .j-search-view {
+    position: relative;
     display: flex;
     flex-wrap: wrap;
-    width: min(680px, calc(100vw - 32px));
-    min-height: 46px;
-    margin: 35vh auto auto auto;
-    overflow: hidden;
-    border: 1px solid #5f6368;
+    width: min(816px, calc(100vw - 32px));
+    min-height: 54px;
+    margin: 32vh auto auto auto;
+    overflow: visible;
+    padding: 1px;
     border-radius: 8px;
-    background: rgba(16, 18, 22, .72);
-    box-shadow: 0 18px 60px rgba(0, 0, 0, .28);
+    background: var(--jstart-glass);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    backdrop-filter: blur(18px) saturate(140%);
+}
+
+.jstart-border-effect {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    padding: 1px;
+    border-radius: inherit;
+    overflow: hidden;
+    pointer-events: none;
+    background: var(--jstart-border);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+}
+
+.jstart-border-effect::before {
+    content: '';
+    position: absolute;
+    width: 240px;
+    height: 56px;
+    offset-path: border-box;
+    offset-anchor: 84% 50%;
+    offset-rotate: auto;
+    animation: jstart-border-flow 8s linear infinite;
+    background: linear-gradient(to right,
+        transparent 0%,
+        rgba(142, 99, 240, .08) 10%,
+        rgba(155, 105, 250, .25) 38%,
+        rgba(177, 133, 255, .5) 65%,
+        rgba(203, 172, 255, .72) 78%,
+        rgba(242, 230, 255, .85) 84%,
+        rgba(203, 172, 255, .5) 90%,
+        transparent 100%);
+    -webkit-mask: linear-gradient(to bottom, transparent, #fff 40%, #fff 60%, transparent);
+    mask: linear-gradient(to bottom, transparent, #fff 40%, #fff 60%, transparent);
+}
+
+@keyframes jstart-border-flow {
+    from { offset-distance: 0%; }
+    to { offset-distance: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .jstart-border-effect::before {
+        animation: none;
+    }
 }
 
 .jstart-content-view > .j-search-view > .j-search-content {
+    position: relative;
+    z-index: 1;
     display: flex;
-    align-items: center;
+    align-items: stretch;
     width: 100%;
-    min-height: 46px;
-    padding: 0 12px;
+    min-height: 54px;
+    padding: 0 15px;
     box-sizing: border-box;
 }
 
 .j-search-icon-view {
     display: flex;
     align-items: center;
-    flex: 0 0 28px;
-    color: #9aa0a6;
+    align-self: flex-start;
+    margin-top: 17.5px;
+    flex: 0 0 30px;
+    color: rgba(232, 234, 237, .62);
 }
 
 .j-search-icon-view-span,
 .j-search-icon-view-span svg {
     display: block;
-    width: 20px;
-    height: 20px;
+    width: 19px;
+    height: 19px;
     fill: currentColor;
 }
 
 .j-input-view {
     display: flex;
+    flex-direction: column;
     flex: 1 1 auto;
     min-width: 0;
+    padding: 15px 0;
 }
 
 .j-input-view-input {
     width: 100%;
-    height: 44px;
+    height: 24px;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    resize: none;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    overflow-wrap: anywhere;
     border: 0;
     outline: 0;
     background: transparent;
-    color: #e8eaed;
+    color: rgba(250, 250, 255, .94);
+    font-family: inherit;
     font-size: 16px;
-    line-height: 44px;
+    line-height: 24px;
+    caret-color: #b8b5ff;
 }
 
 .j-logo-view {
     display: flex;
+    flex-direction: column;
     align-items: center;
     flex: 0 0 auto;
+    padding: 11px 0;
+    gap: 6px;
+}
+
+.j-parameter-controls {
+    display: flex;
+    margin-top: auto;
+}
+
+.j-parameter-controls[hidden],
+.j-parameter-error[hidden] {
+    display: none;
+}
+
+.j-parameter-mode-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    box-sizing: border-box;
+    border: 1px solid rgba(232, 234, 237, .28);
+    border-radius: 50%;
+    background: transparent;
+    color: rgba(232, 234, 237, .55);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease;
+}
+
+.j-parameter-mode-button:hover,
+.j-parameter-mode-button:focus-visible {
+    border-color: rgba(181, 178, 255, .6);
+    color: #eeedff;
+}
+
+.j-parameter-mode-button[aria-pressed="true"] {
+    border-color: #b8b5ff;
+    background: rgba(139, 128, 255, .08);
+    color: #c9c6ff;
+}
+
+.j-parameter-error {
+    margin-top: 8px;
+    color: #f6b6a7;
+    font-size: 11px;
+    line-height: 16px;
 }
 
 .j-logo-view-div {
@@ -78,13 +205,13 @@
     width: 32px;
     height: 32px;
     border: 0;
-    border-radius: 6px;
+    border-radius: 9px;
     background: transparent;
     cursor: pointer;
 }
 
 .j-logo-view-div:hover {
-    background: rgba(255, 255, 255, .08);
+    background: rgba(255, 255, 255, .09);
 }
 
 .j-logo-view-div-img {
@@ -93,6 +220,8 @@
 }
 
 .j-search-view > .jstart-suggest-view {
+    position: relative;
+    z-index: 1;
     width: 100%;
     max-height: min(460px, calc(100vh - 140px));
     overflow-y: auto;
@@ -114,8 +243,8 @@
 
 .jstart-suggest-section {
     padding: 10px 10px 6px 10px;
-    border-top: 1px solid rgba(95, 99, 104, .65);
-    color: #9aa0a6;
+    border-top: 1px solid var(--jstart-divider);
+    color: rgba(232, 234, 237, .55);
     font-size: 11px;
     font-weight: 700;
     line-height: 1;
@@ -144,7 +273,7 @@
 
 .jstart-suggest-view-item:hover,
 .jstart-suggest-view-item.jstart-selected {
-    background: rgba(255, 255, 255, .09);
+    background: rgba(255, 255, 255, .085);
 }
 
 .jstart-suggest-view-item > * {
@@ -191,6 +320,10 @@
     color: #8ab4f8;
 }
 
+.jstart-type-icon-url svg {
+    fill: none;
+}
+
 .jstart-type-icon-bookmark {
     color: #fdd663;
 }
@@ -223,15 +356,23 @@
 }
 
 .jstart-suggest-title {
-    color: #f1f3f4;
+    color: rgba(250, 250, 255, .92);
     font-size: 14px;
     line-height: 18px;
 }
 
 .jstart-suggest-subtitle {
-    color: #9aa0a6;
+    color: rgba(232, 234, 237, .52);
     font-size: 12px;
     line-height: 16px;
+}
+
+.jstart-suggest-subtitle[hidden] {
+    display: none;
+}
+
+.jstart-error-result .jstart-suggest-subtitle {
+    white-space: normal;
 }
 
 .jstart-suggest-tag {
@@ -242,11 +383,17 @@
     height: 22px;
     padding: 0 7px;
     border-radius: 5px;
-    background: rgba(255, 255, 255, .08);
-    color: #bdc1c6;
+    background: rgba(255, 255, 255, .075);
+    color: rgba(232, 234, 237, .62);
     font-size: 11px;
     line-height: 22px;
     box-sizing: border-box;
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+    .jstart-content-view > .j-search-view {
+        background: rgba(18, 18, 28, .94);
+    }
 }
 
 @keyframes jstart-loading-row {

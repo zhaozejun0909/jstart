@@ -3,6 +3,7 @@
 let commands = []
 let bookmarkFolders = []
 let ignoredBookmarkFolderIds = []
+const backgroundNames = Array.from(document.querySelectorAll('#background-name option'), option => option.value)
 
 const nodes = {
     list: document.getElementById('command-list'),
@@ -16,6 +17,8 @@ const nodes = {
     add: document.getElementById('add-command'),
     save: document.getElementById('save-command'),
     cancel: document.getElementById('cancel-edit'),
+    backgroundName: document.getElementById('background-name'),
+    backgroundMode: document.getElementById('background-mode'),
     bookmarkList: document.getElementById('bookmark-folder-list'),
     bookmarkEmpty: document.getElementById('bookmark-empty-state'),
     saveBookmarkFolders: document.getElementById('save-bookmark-folders')
@@ -25,12 +28,22 @@ nodes.add.addEventListener('click', () => openEditor())
 nodes.cancel.addEventListener('click', closeEditor)
 nodes.save.addEventListener('click', saveFromEditor)
 nodes.saveBookmarkFolders.addEventListener('click', saveBookmarkFolderSettings)
+nodes.backgroundName.addEventListener('change', () => {
+    chrome.storage.local.set({ jStartBackground: nodes.backgroundName.value })
+})
+nodes.backgroundMode.addEventListener('change', () => {
+    chrome.storage.local.set({ jStartBackgroundMode: nodes.backgroundMode.value })
+})
 nodes.key.addEventListener('input', () => {
     nodes.key.value = normalizeCommandKey(nodes.key.value)
 })
 
 loadCommands()
 loadBookmarkSettings()
+chrome.storage.local.get(['jStartBackground', 'jStartBackgroundMode']).then(result => {
+    nodes.backgroundName.value = backgroundNames.includes(result.jStartBackground) ? result.jStartBackground : 'light-rays'
+    nodes.backgroundMode.value = result.jStartBackgroundMode === 'static' ? 'static' : 'dynamic'
+})
 
 function loadCommands() {
     chrome.runtime.sendMessage(chrome.runtime.id, {

@@ -7,6 +7,8 @@ let jStartEngineResults = []
 let jStartLocalResults = []
 let jStartSuggestSelectedIndex = -1
 let jStartInputVersion = 0
+let jStartLastInput = ''
+let jStartParameterMode = false
 let jStartHost = null
 let jStartRoot = null
 let jStartIsComposing = false
@@ -20,6 +22,7 @@ const SEARCH_LOGOS = {
 }
 
 const TYPE_LABELS = {
+    url: '网址',
     engine: '搜索',
     bookmark: '书签',
     tab: '标签',
@@ -78,6 +81,9 @@ function insertHTML() {
     jStartEngineResults = []
     jStartLocalResults = []
     jStartSuggestSelectedIndex = -1
+    jStartLastInput = ''
+    jStartParameterMode = false
+    jStartInputVersion++
 
     const view = getJStartElement('jstart-content-view')
     if (jStarttabStart) {
@@ -96,7 +102,9 @@ function insertHTML() {
 
     const input = getJStartElement('j-input-view-input')
     input.addEventListener('keydown', handleJStartKeydown, true)
-    input.addEventListener('input', debounce(onInputChange, 120))
+    input.addEventListener('input', resizeSearchInput)
+    input.addEventListener('input', debounce(refreshInputResults, 120))
+    window.addEventListener('resize', resizeSearchInput)
     input.addEventListener('compositionstart', () => {
         jStartIsComposing = true
     })
@@ -104,12 +112,18 @@ function insertHTML() {
         jStartIsComposing = false
     })
     getJStartElement('j-logo-view-button').addEventListener('click', changeSearchType)
+    getJStartElement('j-parameter-mode-button').addEventListener('click', toggleParameterMode)
     getJStartElement('jstart-content-view').addEventListener('click', handleBackdropClick)
     addPageShortcutBlockers()
     revealAfterStyleLoaded()
 }
 
 function submitCurrentInput(newTab) {
+    refreshInputResults()
+    if (jStartParameterMode && !getInputValue()) {
+        focusOnSearch()
+        return
+    }
     const result = getSuggestSelected()
     if (result) {
         executeSuggestResult(result, newTab)
@@ -130,7 +144,9 @@ function submitCurrentInput(newTab) {
 function executeSuggestResult(result, newTab) {
     if (result.action && result.action.kind === 'fill') {
         const input = getJStartElement('j-input-view-input')
+        jStartParameterMode = false
         input.value = result.action.value
+        resizeSearchInput()
         onInputChange()
         return
     }
@@ -142,15 +158,25 @@ function executeSuggestResult(result, newTab) {
     }
 
     const keepUIWhileNavigating = shouldKeepUIWhileNavigating(result, newTab)
+    const inputVersion = jStartInputVersion
     if (keepUIWhileNavigating) showLoadingState(result, getResultTargetUrl(result))
     chrome.runtime.sendMessage(chrome.runtime.id, {
         type: 'jstart:executeResult',
         result,
         newTab
-    }).then(() => {
+    }).then(response => {
+        if (response && response.ok === false) throw new Error(response.error || '无法打开，请重试')
+        if (inputVersion !== jStartInputVersion) return
         if (!keepUIWhileNavigating) removeHTML()
-    }).catch(() => {
-        if (keepUIWhileNavigating) clearLoadingState()
+    }).catch(error => {
+        if (inputVersion !== jStartInputVersion) return
+        clearLoadingState()
+        const item = getJStartElements('.jstart-suggest-view-item')[getResultIndex(result)]
+        if (!item) return
+        item.classList.add('jstart-error-result')
+        const subtitle = item.querySelector('.jstart-suggest-subtitle')
+        subtitle.hidden = false
+        subtitle.textContent = error.message
     })
 }
 
@@ -204,7 +230,11 @@ function refreshLoadingResult() {
         const isLoading = result && result.id === jStartLoadingResultId
         item.classList.toggle('jstart-loading-result', Boolean(isLoading))
         const subtitle = item.querySelector('.jstart-suggest-subtitle')
-        if (isLoading && subtitle) subtitle.textContent = `正在打开 ${jStartLoadingUrl || getResultTargetUrl(result) || result.title || ''}`
+        if (!subtitle) return
+        subtitle.hidden = !isLoading && result.type === 'engine'
+        subtitle.textContent = isLoading
+            ? `正在打开 ${jStartLoadingUrl || getResultTargetUrl(result) || result.title || ''}`
+            : result.type === 'engine' ? '' : result.subtitle || TYPE_LABELS[result.type] || ''
     })
 }
 
@@ -226,6 +256,7 @@ function buildUrlFromTemplate(template, query) {
 
 function removeHTML() {
     removePageShortcutBlockers()
+    window.removeEventListener('resize', resizeSearchInput)
     if (jStartHost) jStartHost.remove()
     jStartHost = null
     jStartRoot = null
@@ -234,7 +265,9 @@ function removeHTML() {
 }
 
 function handleSearchResult(result) {
+    if (jStartParameterMode) return
     if (!result.type || !result.data || result.query !== getInputValue()) return
+    if (parseNavigationUrl(getInputValue())) return
 
     const type = result.type
     const data = result.data
@@ -277,16 +310,66 @@ function createEngineResult(title) {
     }
 }
 
+// 只判断明确的网址；普通词语和斜杠命令继续走原来的搜索逻辑。
+function parseNavigationUrl(input) {
+    const text = input.trim()
+    if (!text || text.startsWith('/') || /[\r\n\t]/.test(text)) return null
+
+    try {
+        if (/^(https?|file):\/\//i.test(text)) {
+            const url = new URL(text)
+            if (url.protocol === 'file:') return url.href
+            return url.hostname && !/\s/.test(text) ? url.href : null
+        }
+        if (/\s/.test(text)) return null
+        const url = new URL(`https://${text}`)
+        if (url.username || url.password) return null
+        const host = url.hostname
+        const isLocal = host === 'localhost' || host.endsWith('.localhost')
+        const isIP = /^\d+\.\d+\.\d+\.\d+$/.test(host) || host.startsWith('[')
+        const isDomain = host.includes('.') && host.split('.').every(label => /^[a-z\d](?:[a-z\d-]*[a-z\d])?$/i.test(label))
+        if (!isLocal && !isIP && !isDomain) return null
+        // 不把纯数字误识别成 URL；URL 解析器会把它转换成 IPv4。
+        if (isIP && !/[.\[]/.test(text.split(/[/?#]/)[0])) return null
+        return isLocal || isIP ? new URL(`http://${text}`).href : url.href
+    } catch {
+        return null
+    }
+}
+
+function refreshInputResults() {
+    if (getRawInputValue() !== jStartLastInput) onInputChange()
+}
+
 function onInputChange() {
+    if (!getRawInputValue()) jStartParameterMode = false
     const text = getInputValue()
+    jStartLastInput = getRawInputValue()
     const inputVersion = ++jStartInputVersion
     clearLoadingState()
     jStartSuggestSelectedIndex = -1
     jStartEngineResults = []
     jStartLocalResults = []
 
+    const url = parseNavigationUrl(text)
+    refreshParameterToggle(url)
+
     if (!text) {
         removeSuggest()
+        return
+    }
+
+    if (url) {
+        jStartLocalResults = [{
+            id: `url:${url}`,
+            type: 'url',
+            title: url,
+            subtitle: url.startsWith('file:') ? '打开本地文件' : '打开网址',
+            action: { kind: 'open_url', url }
+        }]
+        jStartEngineResults = [createEngineResult(text.trim())]
+        jStartSuggestSelectedIndex = 0
+        renderSuggest()
         return
     }
 
@@ -309,7 +392,7 @@ function requestLocalResults(text, inputVersion) {
         type: 'jstart:searchLocal',
         text
     }).then(response => {
-        if (inputVersion !== jStartInputVersion) return
+        if (inputVersion !== jStartInputVersion || text !== getInputValue()) return
         jStartLocalResults = response && response.results ? response.results : []
         renderSuggest()
     }).catch(() => {})
@@ -327,7 +410,8 @@ function renderSuggest() {
 
     const suggestHtml = $('<div class="jstart-suggest-view" id="jstart-suggest-view"></div>')
     if (showLocal) {
-        appendSuggestSection(suggestHtml, getInputValue().startsWith('/') ? '命令与本地结果' : '其他', jStartLocalResults)
+        const title = jStartLocalResults[0].type === 'url' ? '直接打开' : getInputValue().startsWith('/') ? '命令与本地结果' : '其他'
+        appendSuggestSection(suggestHtml, title, jStartLocalResults)
     }
     if (showEngine) {
         appendSuggestSection(suggestHtml, '搜索建议', jStartEngineResults)
@@ -355,8 +439,12 @@ function appendSuggestSection(container, title, results) {
         const titleNode = $('<span class="jstart-suggest-title"></span>')
         const subtitleNode = $('<span class="jstart-suggest-subtitle"></span>')
         const isLoading = result.id === jStartLoadingResultId
+        const subtitle = isLoading
+            ? `正在打开 ${jStartLoadingUrl || getResultTargetUrl(result) || result.title || ''}`
+            : result.type === 'engine' ? '' : result.subtitle || TYPE_LABELS[result.type] || ''
         titleNode.text(result.title || '')
-        subtitleNode.text(isLoading ? `正在打开 ${jStartLoadingUrl || getResultTargetUrl(result) || result.title || ''}` : result.subtitle || TYPE_LABELS[result.type] || '')
+        subtitleNode.text(subtitle)
+        subtitleNode.prop('hidden', !subtitle)
         content.append(titleNode)
         content.append(subtitleNode)
         item.append(content)
@@ -399,6 +487,7 @@ function createTypeIcon(type) {
 
 function getIconSvg(type) {
     const icons = {
+        url: '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><ellipse cx="12" cy="12" rx="4" ry="9" stroke="currentColor" stroke-width="2"/><path d="M3 12h18" stroke="currentColor" stroke-width="2"/></svg>',
         engine: '<svg viewBox="0 0 24 24"><path d="M10.8 18a7.2 7.2 0 1 1 5.1-2.1l4.1 4.1-1.6 1.6-4.1-4.1A7.1 7.1 0 0 1 10.8 18Zm0-2.2a5 5 0 1 0 0-10.1 5 5 0 0 0 0 10.1Z"/></svg>',
         bookmark: '<svg viewBox="0 0 24 24"><path d="M6 3.8c0-1 .8-1.8 1.8-1.8h8.4c1 0 1.8.8 1.8 1.8v18L12 18l-6 3.8v-18Z"/></svg>',
         tab: '<svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 18.5v-13Zm2.5-.3a.3.3 0 0 0-.3.3v3.2h11.6V5.5a.3.3 0 0 0-.3-.3h-11Zm-.3 5.7v7.6c0 .2.1.3.3.3h11c.2 0 .3-.1.3-.3v-7.6H6.2Z"/></svg>',
@@ -465,10 +554,79 @@ function changeSearchType() {
     if (getInputValue() && !getInputValue().startsWith('/')) onInputChange()
 }
 
-function getInputValue() {
+function getRawInputValue() {
     const inputE = getJStartElement('j-input-view-input')
     if (inputE) return inputE.value
     return ''
+}
+
+function getInputValue() {
+    const text = getRawInputValue()
+    return jStartParameterMode ? buildParameterUrl(text) : text
+}
+
+function formatParameterUrl(value) {
+    const url = new URL(value)
+    const lines = [url.href.split(/[?#]/)[0]]
+    for (const [name, value] of url.searchParams) {
+        lines.push(`${lines.length === 1 ? '?' : '&'}${name}=${value}`)
+    }
+    if (url.hash) {
+        let hash = url.hash.slice(1)
+        try { hash = decodeURIComponent(hash) } catch {}
+        lines.push(`#${hash}`)
+    }
+    return lines.join('\n')
+}
+
+function buildParameterUrl(text) {
+    const [base, ...lines] = text.split(/\r?\n/)
+    const target = parseNavigationUrl(base)
+    if (!target) return ''
+    const url = new URL(target)
+    // 第一行只放完整地址；整段替换成单行 URL 时也可以直接打开。
+    if (!lines.length) return url.href
+    if (url.search || url.hash) return ''
+    for (const line of lines) {
+        if (!line.trim()) continue
+        if (line.startsWith('#')) {
+            url.hash = encodeURI(line.slice(1)).replace(/#/g, '%23')
+            continue
+        }
+        const parameter = line.replace(/^[?&]/, '')
+        const separator = parameter.indexOf('=')
+        if (separator < 0) return ''
+        url.searchParams.append(parameter.slice(0, separator), parameter.slice(separator + 1))
+    }
+    return url.href
+}
+
+function refreshParameterToggle(url) {
+    const controls = getJStartElement('j-parameter-controls')
+    if (!controls) return
+    const button = getJStartElement('j-parameter-mode-button')
+    const error = getJStartElement('j-parameter-error')
+    controls.hidden = !jStartParameterMode && !(url && new URL(url).searchParams.size)
+    button.setAttribute('aria-pressed', String(jStartParameterMode))
+    button.title = jStartParameterMode ? '恢复完整网址；Shift + Enter 换行，Enter 打开' : '逐行编辑网址参数'
+    error.hidden = !jStartParameterMode || Boolean(url)
+}
+
+function toggleParameterMode() {
+    const input = getJStartElement('j-input-view-input')
+    const url = parseNavigationUrl(getInputValue())
+    if (!url) {
+        refreshParameterToggle(null)
+        focusOnSearch()
+        return
+    }
+    jStartParameterMode = !jStartParameterMode
+    input.value = jStartParameterMode ? formatParameterUrl(url) : url
+    onInputChange()
+    resizeSearchInput()
+    focusOnSearch()
+    const position = jStartParameterMode ? input.value.indexOf('\n') + 1 : input.value.length
+    input.setSelectionRange(position, position)
 }
 
 function refreshLogo() {
@@ -484,24 +642,61 @@ function revealAfterStyleLoaded() {
     const reveal = () => {
         if (revealed || !jStartHost) return
         revealed = true
+        resizeSearchInput()
         jStartHost.style.visibility = 'visible'
         focusOnSearch()
     }
 
-    if (!stylesheet) {
+    if (!stylesheet || stylesheet.sheet) {
         reveal()
         return
     }
 
     stylesheet.addEventListener('load', reveal, { once: true })
     stylesheet.addEventListener('error', reveal, { once: true })
-    setTimeout(reveal, 120)
 }
 
 function focusOnSearch() {
     const input = getJStartElement('j-input-view-input')
     if (!input) return
     input.focus({ preventScroll: true })
+}
+
+function resizeSearchInput() {
+    const input = getJStartElement('j-input-view-input')
+    if (!input) return
+    // 保持原单行输入框的粘贴行为；换行仅用于显示。
+    if (!jStartParameterMode && /[\r\n]/.test(input.value)) {
+        const start = input.value.slice(0, input.selectionStart).replace(/[\r\n]/g, '').length
+        const end = input.value.slice(0, input.selectionEnd).replace(/[\r\n]/g, '').length
+        input.value = input.value.replace(/[\r\n]/g, '')
+        input.setSelectionRange(start, end)
+    }
+    input.style.height = '24px'
+    input.style.height = `${input.scrollHeight}px`
+}
+
+function handleInputArrow(event) {
+    if (jStartParameterMode) return false
+    const input = getJStartElement('j-input-view-input')
+    const keyCode = event.key === 'ArrowUp' ? 38 : 40
+    if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false
+    if (input.scrollHeight <= 24) {
+        changeSuggestResult(keyCode)
+        return true
+    }
+
+    // 多行时先让浏览器移动光标；到达边界、无法继续移动时切换建议。
+    const position = input.selectionStart
+    if (position !== input.selectionEnd) return false
+    const value = input.value
+    setTimeout(() => {
+        if (input !== getJStartElement('j-input-view-input') || input.value !== value) return
+        if (input.selectionStart === position && input.selectionEnd === position) {
+            changeSuggestResult(keyCode)
+        }
+    }, 0)
+    return false
 }
 
 function handleJStartKeydown(event) {
@@ -560,6 +755,7 @@ function isJStartControlKey(event) {
 
 function runJStartKeyAction(event) {
     if (event.key === 'Enter') {
+        if (jStartParameterMode && event.shiftKey && !event.metaKey && !event.ctrlKey) return false
         submitCurrentInput(event.metaKey || event.ctrlKey)
         return true
     }
@@ -572,13 +768,8 @@ function runJStartKeyAction(event) {
         else changeSearchType()
         return true
     }
-    if (event.key === 'ArrowDown') {
-        changeSuggestResult(40)
-        return true
-    }
-    if (event.key === 'ArrowUp') {
-        changeSuggestResult(38)
-        return true
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        return handleInputArrow(event)
     }
     if (event.key === '/') {
         if (event.metaKey || event.ctrlKey || event.altKey) return false
@@ -632,8 +823,9 @@ function debounce(callback, delay = 800) {
 
 function getstr() {
     return `
-    <div id="jstart-content-view" class="jstart-content-view">
+    <div id="jstart-content-view" class="jstart-content-view" data-surface="${jStarttabStart ? 'newtab' : 'webpage'}">
       <div class="j-search-view" id="j-search-view">
+          <div class="jstart-border-effect" aria-hidden="true"></div>
           <div class="j-search-content" id="j-search-content">
               <div class="j-search-icon-view">
                   <span class="j-search-icon-view-span">
@@ -643,12 +835,16 @@ function getstr() {
                   </span>
               </div>
               <div class="j-input-view">
-                  <input class="j-input-view-input" id="j-input-view-input" maxlength="2048" name="q" type="text" autocapitalize="off" autocomplete="off" autocorrect="off" role="combobox" spellcheck="false" aria-label="搜索">
+                  <textarea class="j-input-view-input" id="j-input-view-input" maxlength="2048" name="q" rows="1" wrap="soft" autocapitalize="off" autocomplete="off" autocorrect="off" role="combobox" spellcheck="false" aria-label="搜索或输入网址"></textarea>
+                  <span class="j-parameter-error" id="j-parameter-error" role="status" hidden>请检查首行网址，参数行使用 名称=值 格式</span>
               </div>
               <div class="j-logo-view">
                   <button class="j-logo-view-div" id="j-logo-view-button" aria-label="切换搜索平台" type="button">
                       <img class="j-logo-view-div-img" id="j-logo-view-logo" src="${SEARCH_LOGOS.google}" alt="">
                   </button>
+                  <div class="j-parameter-controls" id="j-parameter-controls" hidden>
+                      <button class="j-parameter-mode-button" id="j-parameter-mode-button" type="button" aria-label="切换网址参数模式" aria-pressed="false" title="逐行编辑网址参数">P</button>
+                  </div>
               </div>
           </div>
       </div>
@@ -661,6 +857,5 @@ jStarttabStart = envMeta && envMeta.content && envMeta.content === 'true'
 if (jStarttabStart) {
     $(document).ready(function () {
         showMainView()
-        $('#jstart-curveWrap').css('opacity', '0.5')
     })
 }

@@ -432,7 +432,7 @@ async function findCommand(commandKey) {
 async function executeResult(result, newTab) {
     if (!result || !result.action) return { ok: false }
 
-    await recordUsage(result.usageKey || result.id)
+    if (result.type !== 'url') await recordUsage(result.usageKey || result.id)
     const action = result.action
 
     if (action.kind === 'open_url') {
@@ -461,6 +461,9 @@ async function executeResult(result, newTab) {
 
 async function openUrl(url, newTab) {
     if (!url) return
+    if (/^file:/i.test(url) && !await chrome.extension.isAllowedFileSchemeAccess()) {
+        throw new Error('请在扩展管理 → JStart → 详情中，开启「允许访问文件网址」后重试')
+    }
     if (newTab) {
         await chrome.tabs.create({ url })
         return
@@ -495,8 +498,16 @@ function sendMessageToContentJS(message, tabId) {
     })
 }
 
-function toShowJstartPage() {
-    sendMessageToContentJS({ type: 'jstart', data: 'showStartPage' })
+async function toShowJstartPage() {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+    if (!tab || !tab.id) return
+
+    try {
+        await chrome.tabs.sendMessage(tab.id, { type: 'jstart', data: 'showStartPage' })
+    } catch {
+        // 错误页等无法接收消息的页面，直接在当前标签页打开 JStart。
+        await chrome.tabs.update(tab.id, { url: chrome.runtime.getURL('newtab.html') })
+    }
 }
 
 async function getBookmarks() {

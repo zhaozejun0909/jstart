@@ -1,13 +1,53 @@
+:root {
+    color-scheme: dark;
+    background: #120f17;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: #120f17;
+}
+
 .main_app {
-    font-family: 'Avenir', Helvetica, Arial, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    text-align: center;
-    color: #f5f7fb;
+    position: relative;
     width: 100vw;
     height: 100vh;
-    position: relative;
     overflow: hidden;
+    background:
+        radial-gradient(circle at 52% 42%, rgba(54, 50, 144, .5), transparent 42%),
+        linear-gradient(135deg, #171120, #0d0b12);
+    color: #f5f7fb;
+    font-family: Avenir, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-align: center;
+}
+
+.jstart-background {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.jstart-background canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.jstart-letter-glitch-vignette {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle, transparent 60%, #000 100%);
+    pointer-events: none;
+}
+
+.jstart-letter-glitch-canvas {
+    background: #000;
 }
 
 .jstart-guide {
@@ -36,32 +76,29 @@ body.jstart-guide-visible .jstart-guide {
 .jstart-guide-inner {
     width: min(660px, 100%);
     text-align: left;
-    text-shadow: 0 1px 10px rgba(0, 0, 0, 0.18);
+    text-shadow: 0 1px 10px rgba(0, 0, 0, .18);
 }
 
 .jstart-guide-kicker {
     margin: 0 0 6px;
-    color: rgba(255, 255, 255, 0.42);
+    color: rgba(255, 255, 255, .46);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0;
 }
 
 .jstart-guide h1 {
     margin: 0 0 20px;
-    color: rgba(255, 255, 255, 0.72);
+    color: rgba(255, 255, 255, .82);
     font-size: 27px;
     line-height: 1.18;
     font-weight: 760;
-    letter-spacing: 0;
 }
 
 .jstart-guide-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     column-gap: 26px;
-    row-gap: 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid rgba(255, 255, 255, .1);
 }
 
 .jstart-guide-item {
@@ -70,39 +107,39 @@ body.jstart-guide-visible .jstart-guide {
     gap: 6px;
     min-height: 43px;
     padding: 8px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+    border-bottom: 1px solid rgba(255, 255, 255, .09);
 }
 
 .jstart-guide-item p {
     margin: 0 0 0 8px;
-    color: rgba(255, 255, 255, 0.58);
+    color: rgba(255, 255, 255, .62);
     font-size: 12px;
     line-height: 1.45;
 }
 
 .jstart-guide-item kbd {
     min-width: 23px;
-    box-sizing: border-box;
     padding: 4px 6px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, .14);
     border-radius: 5px;
-    background: rgba(8, 10, 14, 0.24);
-    color: rgba(255, 255, 255, 0.68);
+    background: rgba(8, 10, 14, .24);
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .07);
+    box-sizing: border-box;
+    color: rgba(255, 255, 255, .72);
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 11px;
     line-height: 1;
     text-align: center;
-    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.07);
 }
 
 .jstart-guide-item span {
-    color: rgba(255, 255, 255, 0.34);
+    color: rgba(255, 255, 255, .34);
     font-size: 11px;
 }
 
 .jstart-guide-note {
     margin: 14px 0 0;
-    color: rgba(255, 255, 255, 0.48);
+    color: rgba(255, 255, 255, .5);
     font-size: 11px;
     line-height: 1.6;
 }
@@ -126,5 +163,11 @@ body.jstart-guide-visible .jstart-guide {
 
     .jstart-guide-item {
         align-items: flex-start;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .jstart-guide {
+        transition: none;
     }
 }

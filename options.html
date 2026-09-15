@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JStart Commands</title>
+    <title>JStart Settings</title>
     <link rel="stylesheet" href="options.css">
 </head>
 <body>
@@ -11,40 +11,77 @@
         <header class="options-header">
             <div>
                 <h1>JStart Settings</h1>
-                <p>/ 命令与搜索配置</p>
+                <p>搜索与外观配置</p>
             </div>
-            <button class="primary-button" id="add-command" type="button">新增</button>
         </header>
 
-        <section class="command-editor" id="command-editor" hidden>
-            <input id="command-id" type="hidden">
-            <label>
-                <span>命令</span>
-                <div class="command-key-field">
-                    <strong>/</strong>
-                    <input id="command-key" type="text" autocomplete="off" placeholder="jira">
-                </div>
-            </label>
-            <label>
-                <span>名称</span>
-                <input id="command-name" type="text" autocomplete="off" placeholder="Jira Issue">
-            </label>
-            <label class="wide-field">
-                <span>URL 模板</span>
-                <input id="command-url" type="url" autocomplete="off" placeholder="https://example.com/search?q={query}">
-            </label>
-            <label class="toggle-field">
-                <input id="command-newtab" type="checkbox">
-                <span>新标签页打开</span>
-            </label>
-            <div class="editor-actions">
-                <button class="primary-button" id="save-command" type="button">保存</button>
-                <button class="ghost-button" id="cancel-edit" type="button">取消</button>
+        <section class="appearance-settings">
+            <div>
+                <h2>新标签页背景</h2>
+                <p>选择背景样式和是否播放动画。</p>
+            </div>
+            <div class="appearance-fields">
+                <label>
+                    <span>样式</span>
+                    <select id="background-name">
+                        <option value="ghost-fibers">Ghost Fibers</option>
+                        <option value="letter-glitch">Letter Glitch</option>
+                        <option value="soft-aurora">Soft Aurora</option>
+                        <option value="floating-lines">Floating Lines</option>
+                        <option value="light-pillar">Light Pillar</option>
+                        <option value="light-rays">Light Rays</option>
+                        <option value="galaxy">Galaxy</option>
+                    </select>
+                </label>
+                <label>
+                    <span>动画</span>
+                    <select id="background-mode">
+                        <option value="dynamic">动态</option>
+                        <option value="static">静态</option>
+                    </select>
+                </label>
             </div>
         </section>
 
-        <section class="command-list" id="command-list"></section>
-        <p class="empty-state" id="empty-state">还没有自定义命令</p>
+        <section class="settings-section command-settings">
+            <header class="section-header">
+                <div>
+                    <h2>自定义命令</h2>
+                    <p>创建通过斜杠快速打开的搜索命令。</p>
+                </div>
+                <button class="primary-button" id="add-command" type="button">新增</button>
+            </header>
+
+            <section class="command-editor" id="command-editor" hidden>
+                <input id="command-id" type="hidden">
+                <label>
+                    <span>命令</span>
+                    <div class="command-key-field">
+                        <strong>/</strong>
+                        <input id="command-key" type="text" autocomplete="off" placeholder="jira">
+                    </div>
+                </label>
+                <label>
+                    <span>名称</span>
+                    <input id="command-name" type="text" autocomplete="off" placeholder="Jira Issue">
+                </label>
+                <label class="wide-field">
+                    <span>URL 模板</span>
+                    <input id="command-url" type="url" autocomplete="off" placeholder="https://example.com/search?q={query}">
+                </label>
+                <label class="toggle-field">
+                    <input id="command-newtab" type="checkbox">
+                    <span>新标签页打开</span>
+                </label>
+                <div class="editor-actions">
+                    <button class="primary-button" id="save-command" type="button">保存</button>
+                    <button class="ghost-button" id="cancel-edit" type="button">取消</button>
+                </div>
+            </section>
+
+            <section class="command-list" id="command-list"></section>
+            <p class="empty-state" id="empty-state">还没有自定义命令</p>
+        </section>
 
         <section class="settings-section">
             <header class="section-header">

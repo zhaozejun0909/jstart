@@ -12,7 +12,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
     font: inherit;
 }
 
@@ -40,6 +41,57 @@ input {
     margin: 2px 0 0 0;
     color: #9aa0a6;
     font-size: 13px;
+}
+
+.appearance-settings {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 22px;
+    padding: 16px;
+    border: 1px solid #30343d;
+    border-radius: 8px;
+    background: #191c23;
+}
+
+.appearance-settings h2 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.appearance-settings p {
+    margin: 4px 0 0;
+    color: #9aa0a6;
+    font-size: 12px;
+}
+
+.command-settings {
+    margin-top: 0;
+}
+
+.appearance-fields {
+    display: flex;
+    gap: 12px;
+}
+
+.appearance-fields label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    color: #9aa0a6;
+    font-size: 12px;
+}
+
+.appearance-fields select {
+    min-width: 120px;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid #3c4043;
+    border-radius: 6px;
+    outline: 0;
+    background: #111318;
+    color: #f1f3f4;
 }
 
 .primary-button,
@@ -294,6 +346,21 @@ input {
 }
 
 @media (max-width: 680px) {
+    .appearance-settings {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .appearance-fields {
+        width: 100%;
+    }
+
+    .appearance-fields label,
+    .appearance-fields select {
+        flex: 1;
+        min-width: 0;
+    }
+
     .command-editor,
     .command-row {
         grid-template-columns: 1fr;
