@@ -58,7 +58,9 @@
     offset-path: border-box;
     offset-anchor: 84% 50%;
     offset-rotate: auto;
-    animation: jstart-border-flow 8s linear infinite;
+    animation:
+        jstart-border-startup 1s linear,
+        jstart-border-flow 8s linear 1s infinite;
     background: linear-gradient(to right,
         transparent 0%,
         rgba(142, 99, 240, .08) 10%,
@@ -73,8 +75,20 @@
 }
 
 @keyframes jstart-border-flow {
-    from { offset-distance: 0%; }
-    to { offset-distance: 100%; }
+    from { offset-distance: 10%; }
+    to { offset-distance: 110%; }
+}
+
+@keyframes jstart-border-startup {
+    0% {
+        offset-distance: 0%;
+        animation-timing-function: linear;
+    }
+    63.333% {
+        offset-distance: 100%;
+        animation-timing-function: cubic-bezier(.2, .4, .8, .95);
+    }
+    100% { offset-distance: 110%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
