@@ -1,5 +1,10 @@
 /* eslint-disable */
 
+import './ai-background.js'
+import { Converter } from './vendor/opencc-t2cn.js'
+
+const toSimplified = Converter({ from: 't', to: 'cn' })
+
 const STORAGE_KEYS = {
     searchType: 'jStartSearchType',
     customCommands: 'jStartCustomCommands',
@@ -49,6 +54,8 @@ if (chrome.bookmarks) {
 chrome.commands.onCommand.addListener((command) => {
     if (command === 'command-home') {
         toShowJstartPage()
+    } else if (command === 'command-global-home') {
+        toShowJstartPageGlobally()
     } else if (command === 'command-openinnewtab') {
         toOpenResultInNewTab()
     } else if (command === 'command-toggle-previous-tab') {
@@ -140,10 +147,13 @@ function requestSearch(text, type = 'baidu', tabId, callback) {
             sendMessageToContentJS(message, tabId)
         }).catch(() => callback({ type: 'baidu', query: text, data: null }))
     } else if (type === 'google') {
-        fetch(`https://suggestqueries.google.com/complete/search?output=toolbar&hl=zh&q=${query}`).then(response => {
-            return response.text()
-        }).then(str => {
-            const message = { type: 'google', query: text, data: str }
+        fetch(`https://suggestqueries.google.com/complete/search?client=chrome&hl=zh-CN&gl=CN&q=${query}`).then(response => {
+            return response.json()
+        }).then(data => {
+            const suggestions = Array.isArray(data?.[1])
+                ? [...new Set(data[1].filter(item => typeof item === 'string').map(toSimplified))]
+                : []
+            const message = { type: 'google', query: text, data: suggestions }
             callback(message)
             sendMessageToContentJS(message, tabId)
         }).catch(() => callback({ type: 'google', query: text, data: null }))
@@ -498,16 +508,28 @@ function sendMessageToContentJS(message, tabId) {
     })
 }
 
-async function toShowJstartPage() {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+async function toShowJstartPage(windowId, alwaysShow = false) {
+    const query = windowId ? { active: true, windowId } : { active: true, currentWindow: true }
+    const [tab] = await chrome.tabs.query(query)
     if (!tab || !tab.id) return
 
     try {
-        await chrome.tabs.sendMessage(tab.id, { type: 'jstart', data: 'showStartPage' })
+        await chrome.tabs.sendMessage(tab.id, { type: 'jstart', data: alwaysShow ? 'focusStartPage' : 'showStartPage' })
     } catch {
         // 错误页等无法接收消息的页面，直接在当前标签页打开 JStart。
         await chrome.tabs.update(tab.id, { url: chrome.runtime.getURL('newtab.html') })
     }
+}
+
+async function toShowJstartPageGlobally() {
+    const window = await chrome.windows.getLastFocused({ windowTypes: ['normal'] })
+    if (!window || !window.id) return
+
+    if (window.state === 'minimized') {
+        await chrome.windows.update(window.id, { state: 'normal' })
+    }
+    await chrome.windows.update(window.id, { focused: true })
+    await toShowJstartPage(window.id, true)
 }
 
 async function getBookmarks() {

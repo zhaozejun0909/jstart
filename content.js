@@ -5,7 +5,9 @@ let jStartSearchType = 'google'
 let jStarttabStart = false
 let jStartEngineResults = []
 let jStartLocalResults = []
+let jStartAIResult = null
 let jStartSuggestSelectedIndex = -1
+let jStartUserSelectedResult = false
 let jStartInputVersion = 0
 let jStartLastInput = ''
 let jStartParameterMode = false
@@ -14,6 +16,14 @@ let jStartRoot = null
 let jStartIsComposing = false
 let jStartLoadingResultId = null
 let jStartLoadingUrl = ''
+let jStartAIProvider = null
+let jStartAIProviderRequest = null
+let jStartAISession = null
+let jStartAIBusy = false
+let jStartAIViewPromise
+let jStartAIRequestVersion = 0
+let jStartLocalRequest = null
+let jStartImages = []
 
 const SEARCH_LOGOS = {
     google: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PHBhdGggZmlsbD0iI0ZCQkMwNSIgZD0iTTQzLjYgMjAuNUgyNHY3LjloMTEuM0MzNC4yIDMzLjcgMjkuOCAzNyAyNCAzN2MtNy4yIDAtMTMtNS44LTEzLTEzczUuOC0xMyAxMy0xM2MzLjEgMCA1LjkgMS4xIDguMSAyLjlsNS42LTUuNkMzNC4xIDQuNSAyOS4zIDIgMjQgMiAxMS44IDIgMiAxMS44IDIgMjRzOS44IDIyIDIyIDIyYzExIDAgMjEtOCAyMS0yMiAwLTEuMy0uMS0yLjQtLjQtMy41eiIvPjxwYXRoIGZpbGw9IiNFQTQzMzUiIGQ9Ik02LjMgMTQuN2w2LjYgNC44QzE0LjcgMTQuNiAxOSAzMSAyNCAzMWMzLjEgMCA1LjktMS4xIDguMS0yLjlsNS42IDUuNkMzNC4xIDM3LjUgMjkuMyA0MCAyNCA0MGMtOC44IDAtMTYtNy4yLTE2LTE2IDAtMy4zIDEuMS02LjQgMy4zLTkuM3oiLz48cGF0aCBmaWxsPSIjMzRBODUzIiBkPSJNNi4zIDMzLjNsNi42LTQuOEMxNC43IDMzLjQgMTkgMzcgMjQgMzdjMy4xIDAgNS45LTEuMSA4LjEtMi45bDUuNiA1LjZDMzQuMSA0My41IDI5LjMgNDYgMjQgNDYgMTYuMSA0NiA5LjIgNDEuOCA1LjMgMzUuNXoiLz48cGF0aCBmaWxsPSIjNDI4NUY0IiBkPSJNNDUgMjRjMC0xLjMtLjEtMi40LS40LTMuNUgyNHY3LjloMTEuM0MzNC44IDMxIDMwLjUgMzcgMjQgMzdjLTMuMSAwLTUuOS0xLjEtOC4xLTIuOWwtNS42IDUuNkMxNC4xIDQzLjUgMTguOSA0NiAyNCA0NmMxMSAwIDIxLTggMjEtMjJ6Ii8+PC9zdmc+',
@@ -22,6 +32,7 @@ const SEARCH_LOGOS = {
 }
 
 const TYPE_LABELS = {
+    ai: 'AI',
     url: '网址',
     engine: '搜索',
     bookmark: '书签',
@@ -33,8 +44,8 @@ const TYPE_LABELS = {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!message.type) return false
     if (message.type === 'jstart') {
-        if (message.data === 'showStartPage') {
-            showMainView()
+        if (message.data === 'showStartPage' || message.data === 'focusStartPage') {
+            showMainView(message.data === 'focusStartPage')
         } else if (message.data === 'openResultInNewTab' && jStrartActived) {
             submitCurrentInput(true)
         } else {
@@ -49,9 +60,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false
 });
 
-function showMainView() {
+chrome.storage?.onChanged?.addListener((changes, area) => {
+    if (area === 'local' && jStrartActived && (changes.jStartAISettings || changes.jStartAIProvider)) loadAIProvider()
+})
+
+function showMainView(alwaysShow = false) {
     if (document.getElementById('jstart-shadow-host')) {
-        removeHTML()
+        if (alwaysShow) focusOnSearch()
+        else removeHTML()
     } else {
         insertHTML()
     }
@@ -80,10 +96,16 @@ function insertHTML() {
     jStrartActived = true
     jStartEngineResults = []
     jStartLocalResults = []
+    jStartAIResult = null
     jStartSuggestSelectedIndex = -1
+    jStartUserSelectedResult = false
     jStartLastInput = ''
     jStartParameterMode = false
+    jStartLocalRequest = null
+    jStartImages = []
     jStartInputVersion++
+    jStartAISession = null
+    jStartAIBusy = false
 
     const view = getJStartElement('jstart-content-view')
     if (jStarttabStart) {
@@ -93,33 +115,62 @@ function insertHTML() {
         view.classList.add('jstart-content-visible')
     }
 
-    chrome.storage.local.get(['jStartSearchType'], function (result) {
+    chrome.storage.local.get('jStartSearchType', function (result) {
         if (result && result.jStartSearchType) {
             jStartSearchType = result.jStartSearchType
-            refreshLogo()
         }
+        refreshLogo()
+        onInputChange()
+        revealAfterStyleLoaded()
     })
+    loadAIProvider()
 
     const input = getJStartElement('j-input-view-input')
     input.addEventListener('keydown', handleJStartKeydown, true)
+    input.addEventListener('paste', handleImagePaste)
     input.addEventListener('input', resizeSearchInput)
-    input.addEventListener('input', debounce(refreshInputResults, 120))
+    const refreshDebounced = debounce(refreshInputResults, 120)
+    input.addEventListener('input', refreshDebounced)
     window.addEventListener('resize', resizeSearchInput)
     input.addEventListener('compositionstart', () => {
         jStartIsComposing = true
     })
     input.addEventListener('compositionend', () => {
         jStartIsComposing = false
+        refreshDebounced()
     })
     getJStartElement('j-logo-view-button').addEventListener('click', changeSearchType)
     getJStartElement('j-parameter-mode-button').addEventListener('click', toggleParameterMode)
+    getJStartElement('j-image-previews').addEventListener('click', event => {
+        const index = event.target.closest('[data-image-index]')?.dataset.imageIndex
+        if (index === undefined) return
+        jStartImages.splice(Number(index), 1)
+        renderImagePreviews()
+        onInputChange()
+        focusOnSearch()
+    })
     getJStartElement('jstart-content-view').addEventListener('click', handleBackdropClick)
+    jStartRoot.addEventListener('keydown', event => {
+        if (event.key !== 'Escape' || isImeComposing(event)) return
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        removeHTML()
+    }, true)
     addPageShortcutBlockers()
-    revealAfterStyleLoaded()
 }
 
-function submitCurrentInput(newTab) {
+async function submitCurrentInput(newTab) {
+    if (jStartImages.length) {
+        const question = getInputValue().trim() || '请说明图片中的主要内容。'
+        startAIAnswer(question, [...jStartImages])
+        return
+    }
     refreshInputResults()
+    if (jStartLocalRequest) {
+        const version = jStartInputVersion
+        await jStartLocalRequest
+        if (version !== jStartInputVersion || !jStrartActived) return
+    }
     if (jStartParameterMode && !getInputValue()) {
         focusOnSearch()
         return
@@ -137,7 +188,8 @@ function submitCurrentInput(newTab) {
     }
 
     if (!value.startsWith('/')) {
-        handleKeywordSearch(value, newTab)
+        if (jStartSearchType === 'ai') startAIAnswer(value)
+        else handleKeywordSearch(value, newTab)
     }
 }
 
@@ -152,22 +204,33 @@ function executeSuggestResult(result, newTab) {
     }
 
     if (result.type === 'engine') {
-        if (!newTab) showLoadingState(result, buildKeywordSearchUrl(result.title))
+        if (!newTab && !jStartAISession) showLoadingState(result, buildKeywordSearchUrl(result.title))
         handleKeywordSearch(result.title, newTab)
         return
     }
+    if (result.type === 'ai') {
+        const question = getInputValue()
+        jStartSearchType = 'ai'
+        chrome.storage.local.set({ jStartSearchType })
+        refreshLogo()
+        onInputChange()
+        startAIAnswer(question)
+        return
+    }
 
-    const keepUIWhileNavigating = shouldKeepUIWhileNavigating(result, newTab)
+    const effectiveNewTab = newTab || Boolean(jStartAISession && ['open_url', 'open_url_template'].includes(result.action?.kind))
+    const keepUIWhileNavigating = shouldKeepUIWhileNavigating(result, effectiveNewTab)
     const inputVersion = jStartInputVersion
     if (keepUIWhileNavigating) showLoadingState(result, getResultTargetUrl(result))
     chrome.runtime.sendMessage(chrome.runtime.id, {
         type: 'jstart:executeResult',
         result,
-        newTab
+        newTab: effectiveNewTab
     }).then(response => {
         if (response && response.ok === false) throw new Error(response.error || '无法打开，请重试')
         if (inputVersion !== jStartInputVersion) return
-        if (!keepUIWhileNavigating) removeHTML()
+        if (jStartAISession) clearSearchComposer()
+        else if (!keepUIWhileNavigating) removeHTML()
     }).catch(error => {
         if (inputVersion !== jStartInputVersion) return
         clearLoadingState()
@@ -191,12 +254,41 @@ function shouldKeepUIWhileNavigating(result, newTab) {
 function handleKeywordSearch(value, newTab) {
     const goUrl = buildKeywordSearchUrl(value)
 
-    if (!newTab) {
+    if (!newTab && !jStartAISession) {
         location.assign(goUrl)
+    } else if (jStartAISession) {
+        const session = jStartAISession
+        const inputVersion = jStartInputVersion
+        chrome.runtime.sendMessage({
+            type: 'jstart:executeResult',
+            result: { type: 'url', action: { kind: 'open_url', url: goUrl } },
+            newTab: true
+        }).then(response => {
+            if (session !== jStartAISession || inputVersion !== jStartInputVersion) return
+            if (response?.ok) clearSearchComposer()
+            else throw new Error(response?.error || '无法打开搜索页面，请重试。')
+        }).catch(error => {
+            if (session !== jStartAISession || inputVersion !== jStartInputVersion) return
+            const notice = getJStartElement('j-image-error')
+            notice.textContent = error.message
+            notice.hidden = false
+        })
     } else {
         window.open(goUrl, '_blank')
         removeHTML()
     }
+}
+
+function clearSearchComposer() {
+    const input = getJStartElement('j-input-view-input')
+    if (!input) return
+    input.value = ''
+    jStartParameterMode = false
+    jStartImages = []
+    renderImagePreviews()
+    onInputChange()
+    resizeSearchInput()
+    focusOnSearch()
 }
 
 function buildKeywordSearchUrl(value) {
@@ -255,6 +347,9 @@ function buildUrlFromTemplate(template, query) {
 }
 
 function removeHTML() {
+    clearAISession()
+    jStartImages = []
+    jStartInputVersion++
     removePageShortcutBlockers()
     window.removeEventListener('resize', resizeSearchInput)
     if (jStartHost) jStartHost.remove()
@@ -264,9 +359,62 @@ function removeHTML() {
     setNewTabGuideVisible(true)
 }
 
+async function handleImagePaste(event) {
+    const files = Array.from(event.clipboardData?.items || [])
+        .filter(item => item.kind === 'file' && item.type.startsWith('image/'))
+        .map(item => item.getAsFile()).filter(Boolean)
+    if (!files.length) return
+    event.preventDefault()
+    const error = getJStartElement('j-image-error')
+    const fail = message => { error.textContent = message; error.hidden = false }
+    if (jStartImages.length + files.length > 4) return fail('最多粘贴 4 张图片。')
+    if (files.some(file => !['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type))) return fail('支持 PNG、JPEG、GIF 和 WebP 图片。')
+    if (files.some(file => file.size > 5 * 1024 * 1024)) return fail('单张图片不能超过 5 MB。')
+    const root = jStartRoot
+    try {
+        const images = await Promise.all(files.map(file => new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result)
+            reader.onerror = () => reject(reader.error)
+            reader.readAsDataURL(file)
+        })))
+        if (root !== jStartRoot) return
+        jStartParameterMode = false
+        jStartImages.push(...images)
+        error.hidden = true
+        renderImagePreviews()
+        onInputChange()
+    } catch {
+        if (root === jStartRoot) fail('图片读取失败，请重新粘贴。')
+    }
+}
+
+function renderImagePreviews() {
+    const container = getJStartElement('j-image-previews')
+    if (!container) return
+    container.replaceChildren(...jStartImages.map((src, index) => {
+        const item = document.createElement('span')
+        item.className = 'j-image-preview'
+        const image = document.createElement('img')
+        image.src = src
+        image.alt = `已粘贴的图片 ${index + 1}`
+        const remove = document.createElement('button')
+        remove.type = 'button'
+        remove.dataset.imageIndex = index
+        remove.setAttribute('aria-label', `删除图片 ${index + 1}`)
+        remove.title = '删除图片'
+        remove.textContent = '×'
+        item.append(image, remove)
+        return item
+    }))
+    container.hidden = !jStartImages.length
+    getJStartElement('j-image-error').hidden = true
+    refreshLogo()
+}
+
 function handleSearchResult(result) {
-    if (jStartParameterMode) return
-    if (!result.type || !result.data || result.query !== getInputValue()) return
+    if (jStartSearchType === 'ai' || jStartParameterMode || jStartImages.length) return
+    if (result.type !== jStartSearchType || !result.data || result.query !== getInputValue()) return
     if (parseNavigationUrl(getInputValue())) return
 
     const type = result.type
@@ -279,12 +427,7 @@ function handleSearchResult(result) {
         } catch (error) {}
     } else if (type === 'google') {
         try {
-            const xmlData = $.parseXML(data)
-            const xmlDom = $(xmlData)
-            xmlDom.find('suggestion').each((index, element) => {
-                const content = $(element).attr('data')
-                if (content) list.push(createEngineResult(content))
-            })
+            list = data.filter(Boolean).map(createEngineResult)
         } catch (error) {}
     } else if (type === 'bing') {
         try {
@@ -294,8 +437,7 @@ function handleSearchResult(result) {
         } catch (error) {}
     }
 
-    jStartEngineResults = list
-    renderSuggest()
+    updateSuggestions(() => { jStartEngineResults = list })
 }
 
 function createEngineResult(title) {
@@ -338,6 +480,7 @@ function parseNavigationUrl(input) {
 }
 
 function refreshInputResults() {
+    if (jStartIsComposing) return
     if (getRawInputValue() !== jStartLastInput) onInputChange()
 }
 
@@ -348,8 +491,17 @@ function onInputChange() {
     const inputVersion = ++jStartInputVersion
     clearLoadingState()
     jStartSuggestSelectedIndex = -1
+    jStartUserSelectedResult = false
     jStartEngineResults = []
     jStartLocalResults = []
+    jStartAIResult = null
+    jStartLocalRequest = null
+
+    if (jStartImages.length) {
+        refreshParameterToggle(null)
+        removeSuggest()
+        return
+    }
 
     const url = parseNavigationUrl(text)
     refreshParameterToggle(url)
@@ -367,34 +519,45 @@ function onInputChange() {
             subtitle: url.startsWith('file:') ? '打开本地文件' : '打开网址',
             action: { kind: 'open_url', url }
         }]
-        jStartEngineResults = [createEngineResult(text.trim())]
+        jStartEngineResults = jStartSearchType === 'ai' ? [] : [createEngineResult(text.trim())]
         jStartSuggestSelectedIndex = 0
         renderSuggest()
         return
     }
 
     if (!shouldBypassLocalResults(text)) {
-        requestLocalResults(text, inputVersion)
+        jStartLocalRequest = requestLocalResults(text, inputVersion)
     }
 
-    if (!text.startsWith('/')) {
+    if (jStartSearchType !== 'ai' && !text.startsWith('/')) {
         chrome.runtime.sendMessage(chrome.runtime.id, {
             type: jStartSearchType,
             searchWord: text
         }).catch(() => {})
+        if (!/\s$/.test(text) && jStartAIProvider?.semanticEnabled) {
+            chrome.runtime.sendMessage({ type: 'jstart:classifyAI', text }).then(result => {
+                if (result?.route !== 'ai' || inputVersion !== jStartInputVersion || text !== getInputValue() || jStartSearchType === 'ai') return
+                updateSuggestions(() => {
+                    jStartAIResult = {
+                        id: `ai:${text}`, type: 'ai',
+                        title: '问问 AI 吧',
+                        subtitle: '此问题更适合 AI 回答哦'
+                    }
+                })
+            }).catch(() => {})
+        }
     }
 
     renderSuggest()
 }
 
 function requestLocalResults(text, inputVersion) {
-    chrome.runtime.sendMessage(chrome.runtime.id, {
+    return chrome.runtime.sendMessage(chrome.runtime.id, {
         type: 'jstart:searchLocal',
         text
     }).then(response => {
         if (inputVersion !== jStartInputVersion || text !== getInputValue()) return
-        jStartLocalResults = response && response.results ? response.results : []
-        renderSuggest()
+        updateSuggestions(() => { jStartLocalResults = response && response.results ? response.results : [] })
     }).catch(() => {})
 }
 
@@ -402,9 +565,19 @@ function shouldBypassLocalResults(text) {
     return !text.startsWith('/') && /\s$/.test(text)
 }
 
+function updateSuggestions(update) {
+    const selectedId = getSuggestSelected()?.id
+    update()
+    const selectedIndex = selectedId ? getResultIndex({ id: selectedId }) : -1
+    jStartSuggestSelectedIndex = jStartUserSelectedResult && selectedIndex >= 0
+        ? selectedIndex
+        : (jStartLocalResults.length || jStartAIResult) ? 0 : selectedIndex
+    renderSuggest()
+}
+
 function renderSuggest() {
     removeSuggest()
-    const showEngine = !getInputValue().startsWith('/') && jStartEngineResults.length > 0
+    const showEngine = !getInputValue().startsWith('/') && (jStartAIResult || jStartEngineResults.length)
     const showLocal = jStartLocalResults.length > 0
     if (!showEngine && !showLocal) return
 
@@ -414,7 +587,7 @@ function renderSuggest() {
         appendSuggestSection(suggestHtml, title, jStartLocalResults)
     }
     if (showEngine) {
-        appendSuggestSection(suggestHtml, '搜索建议', jStartEngineResults)
+        appendSuggestSection(suggestHtml, '搜索建议', jStartAIResult ? [jStartAIResult, ...jStartEngineResults] : jStartEngineResults)
     }
 
     getJStartElement('j-search-view').appendChild(suggestHtml[0])
@@ -456,10 +629,12 @@ function appendSuggestSection(container, title, results) {
 
         item.on('mouseenter', function () {
             jStartSuggestSelectedIndex = Number($(this).attr('data-index'))
+            jStartUserSelectedResult = true
             refreshSuggestHilight()
         })
         item.on('click', function () {
             jStartSuggestSelectedIndex = Number($(this).attr('data-index'))
+            jStartUserSelectedResult = true
             const selected = getSuggestSelected()
             if (selected) executeSuggestResult(selected, false)
         })
@@ -469,7 +644,7 @@ function appendSuggestSection(container, title, results) {
 }
 
 function handleBackdropClick(event) {
-    if (event.target && event.target.id === 'jstart-content-view') {
+    if (!jStartAISession && !getRawInputValue() && !jStartImages.length && event.target?.id === 'jstart-content-view') {
         removeHTML()
     }
 }
@@ -481,7 +656,8 @@ function getResultIndex(result) {
 function createTypeIcon(type) {
     const icon = $('<span class="jstart-type-icon"></span>')
     icon.addClass(`jstart-type-icon-${type}`)
-    icon.html(getIconSvg(type))
+    if (type === 'ai') icon.append($('<img alt="">').attr('src', chrome.runtime.getURL(jStartAIProvider.icon)))
+    else icon.html(getIconSvg(type))
     return icon
 }
 
@@ -503,7 +679,7 @@ function removeSuggest() {
 }
 
 function getSelectableResults() {
-    return jStartLocalResults.concat(jStartEngineResults)
+    return jStartLocalResults.concat(jStartAIResult ? [jStartAIResult] : [], jStartEngineResults)
 }
 
 function getSuggestSelected() {
@@ -515,6 +691,7 @@ function getSuggestSelected() {
 function changeSuggestResult(keyCode) {
     const list = getSelectableResults()
     if (!list.length) return
+    jStartUserSelectedResult = true
 
     const upKey = keyCode == 38
     if (upKey) {
@@ -542,16 +719,161 @@ function refreshSuggestHilight() {
 }
 
 function changeSearchType() {
-    if (jStartSearchType === 'google') {
-        jStartSearchType = 'baidu'
-    } else if (jStartSearchType === 'baidu') {
-        jStartSearchType = 'bing'
-    } else {
-        jStartSearchType = 'google'
-    }
+    if (jStartImages.length) return
+    const types = ['google', 'baidu', 'bing', 'ai']
+    jStartSearchType = types[(types.indexOf(jStartSearchType) + 1) % types.length]
     chrome.storage.local.set({ jStartSearchType })
     refreshLogo()
-    if (getInputValue() && !getInputValue().startsWith('/')) onInputChange()
+    onInputChange()
+    focusOnSearch()
+}
+
+async function loadAIProvider() {
+    const root = jStartRoot
+    const request = chrome.runtime.sendMessage({ type: 'jstart:aiProvider' }).catch(() => null)
+    jStartAIProviderRequest = request
+    const provider = await request
+    if (root !== jStartRoot || request !== jStartAIProviderRequest) return
+    jStartAIProvider = provider
+    refreshLogo()
+    if (getInputValue() || jStartImages.length) onInputChange()
+}
+
+function getAIProvider() {
+    return jStartAISession?.provider || jStartAIProvider
+}
+
+function showAIOptions() {
+    chrome.runtime.sendMessage({ type: 'jstart:aiOptions' })
+}
+
+function clearAISession() {
+    jStartAIRequestVersion++
+    jStartAISession?.turns.forEach(turn => turn.view?.destroy())
+    jStartAISession = null
+    jStartAIBusy = false
+}
+
+async function startAIAnswer(question, images = []) {
+    if (!question.trim() && !images.length) return
+    if (jStartAIBusy) {
+        const notice = getJStartElement('j-image-error')
+        notice.textContent = '请等待当前回答完成。'
+        notice.hidden = false
+        return
+    }
+    jStartAIBusy = true
+    const version = jStartAIRequestVersion
+    const root = jStartRoot
+    let started = false
+    try {
+        await jStartAIProviderRequest
+        if (version !== jStartAIRequestVersion || root !== jStartRoot) return
+        const provider = getAIProvider()
+        if (!provider?.configured) { showAIOptions(); return }
+        jStartAIViewPromise ||= import(chrome.runtime.getURL('ai-view.js'))
+        const { createAnswerView } = await jStartAIViewPromise
+        if (version !== jStartAIRequestVersion || root !== jStartRoot) return
+        let session = jStartAISession
+        const first = !session
+        if (first) session = createAISession(provider)
+        const history = session.turns.filter(turn => turn.context).reverse().map(turn => turn.context)
+        const turn = { question, images, context: null, view: null, button: null }
+        const button = document.createElement('button')
+        button.type = 'button'
+        button.className = 'j-ai-question-item'
+        button.textContent = question
+        button.title = question
+        button.addEventListener('click', () => selectAIQuestion(session, turn))
+        turn.button = button
+        turn.view = createAnswerView(root, { provider: session.provider, question, images, history,
+            onFinish: context => {
+                turn.context = context
+                jStartAIBusy = false
+                button.classList.toggle('j-ai-question-error', !context)
+                const notice = getJStartElement('j-image-error')
+                if (notice?.textContent === '请等待当前回答完成。') notice.hidden = true
+            }
+        })
+        started = true
+        session.turns.unshift(turn)
+        root.getElementById('j-ai-questions').prepend(button)
+        root.getElementById('j-ai-questions').hidden = session.turns.length < 2
+        clearSearchComposer()
+        if (first) {
+            session.pending = turn
+            setTimeout(() => {
+                if (root !== jStartRoot || session !== jStartAISession || session.pending !== turn) return
+                root.getElementById('j-ai-workspace').classList.remove('j-ai-workspace-pending')
+                selectAIQuestion(session, turn, true)
+            }, 220)
+        } else {
+            const previous = session.selected
+            if (previous && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                previous.view.panel.classList.add('j-ai-shelving')
+            }
+            session.pending = turn
+            setTimeout(() => {
+                if (root !== jStartRoot || session !== jStartAISession || session.pending !== turn) return
+                if (previous) {
+                    previous.view.panel.classList.remove('j-ai-shelving')
+                    previous.button.classList.add('j-ai-archived')
+                    setTimeout(() => previous.button.classList.remove('j-ai-archived'), 500)
+                }
+                selectAIQuestion(session, turn, true)
+            }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180)
+        }
+    } catch {
+        if (version !== jStartAIRequestVersion || root !== jStartRoot) return
+        jStartAIViewPromise = null
+        if (jStartAISession?.turns.length === 0) {
+            root.getElementById('j-ai-workspace')?.remove()
+            getJStartElement('jstart-content-view').classList.remove('j-ai-answering')
+            jStartAISession = null
+        }
+        const error = getJStartElement('j-image-error')
+        error.textContent = 'AI 回答界面加载失败，请重试。'
+        error.hidden = false
+    } finally {
+        if (!started && version === jStartAIRequestVersion && root === jStartRoot) jStartAIBusy = false
+    }
+}
+
+function createAISession(provider) {
+    const view = getJStartElement('jstart-content-view')
+    const inputView = getJStartElement('j-search-view')
+    const oldTop = inputView.getBoundingClientRect().top
+    const workspace = document.createElement('div')
+    workspace.id = 'j-ai-workspace'
+    workspace.className = 'j-ai-workspace j-ai-workspace-pending'
+    workspace.innerHTML = '<aside class="j-ai-questions" id="j-ai-questions" aria-label="本次对话的问题" hidden></aside><div class="j-ai-answer-stage" id="j-ai-answer-stage"></div>'
+    view.classList.add('j-ai-answering')
+    view.append(workspace)
+    const session = { provider, turns: [], selected: null, pending: null }
+    jStartAISession = session
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        inputView.animate([{ transform: `translateY(${oldTop - inputView.getBoundingClientRect().top}px)` }, { transform: 'none' }], { duration: 220, easing: 'ease-out' })
+    }
+    return session
+}
+
+function selectAIQuestion(session, turn, animate = false) {
+    if (session !== jStartAISession) return
+    session.pending = null
+    getJStartElement('j-ai-workspace').classList.remove('j-ai-workspace-pending')
+    for (const item of session.turns) {
+        item.view.panel.classList.remove('j-ai-shelving', 'j-ai-entering')
+        item.button.classList.toggle('j-ai-question-active', item === turn)
+        if (item === turn) {
+            item.view.show()
+            if (animate && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                item.view.panel.classList.add('j-ai-entering')
+                setTimeout(() => item.view.panel.classList.remove('j-ai-entering'), 220)
+            }
+        }
+        else item.view.hide()
+    }
+    session.selected = turn
 }
 
 function getRawInputValue() {
@@ -606,10 +928,10 @@ function refreshParameterToggle(url) {
     if (!controls) return
     const button = getJStartElement('j-parameter-mode-button')
     const error = getJStartElement('j-parameter-error')
-    controls.hidden = !jStartParameterMode && !(url && new URL(url).searchParams.size)
+    controls.hidden = Boolean(jStartImages.length) || (!jStartParameterMode && !(url && new URL(url).searchParams.size))
     button.setAttribute('aria-pressed', String(jStartParameterMode))
     button.title = jStartParameterMode ? '恢复完整网址；Shift + Enter 换行，Enter 打开' : '逐行编辑网址参数'
-    error.hidden = !jStartParameterMode || Boolean(url)
+    error.hidden = Boolean(jStartImages.length) || !jStartParameterMode || Boolean(url)
 }
 
 function toggleParameterMode() {
@@ -632,8 +954,15 @@ function toggleParameterMode() {
 function refreshLogo() {
     const logo = getJStartElement('j-logo-view-logo')
     if (!logo) return
-    logo.src = SEARCH_LOGOS[jStartSearchType]
-    logo.title = jStartSearchType
+    const provider = getAIProvider()
+    logo.src = jStartSearchType === 'ai' || jStartImages.length
+        ? chrome.runtime.getURL(provider?.icon || 'icons/ai/doubao.png')
+        : SEARCH_LOGOS[jStartSearchType]
+    const button = getJStartElement('j-logo-view-button')
+    button.disabled = Boolean(jStartImages.length)
+    const label = jStartImages.length ? `附图提问 · ${provider?.name || '未配置'}` : jStartSearchType === 'ai' ? `AI 问答 · ${provider?.name || '未配置'} · 切换入口` : `${jStartSearchType} · 切换入口`
+    button.title = label
+    button.setAttribute('aria-label', label)
 }
 
 function revealAfterStyleLoaded() {
@@ -665,13 +994,6 @@ function focusOnSearch() {
 function resizeSearchInput() {
     const input = getJStartElement('j-input-view-input')
     if (!input) return
-    // 保持原单行输入框的粘贴行为；换行仅用于显示。
-    if (!jStartParameterMode && /[\r\n]/.test(input.value)) {
-        const start = input.value.slice(0, input.selectionStart).replace(/[\r\n]/g, '').length
-        const end = input.value.slice(0, input.selectionEnd).replace(/[\r\n]/g, '').length
-        input.value = input.value.replace(/[\r\n]/g, '')
-        input.setSelectionRange(start, end)
-    }
     input.style.height = '24px'
     input.style.height = `${input.scrollHeight}px`
 }
@@ -755,7 +1077,7 @@ function isJStartControlKey(event) {
 
 function runJStartKeyAction(event) {
     if (event.key === 'Enter') {
-        if (jStartParameterMode && event.shiftKey && !event.metaKey && !event.ctrlKey) return false
+        if (event.shiftKey && !event.metaKey && !event.ctrlKey) return false
         submitCurrentInput(event.metaKey || event.ctrlKey)
         return true
     }
@@ -764,8 +1086,8 @@ function runJStartKeyAction(event) {
         return true
     }
     if (event.key === 'Tab') {
-        if (getSelectableResults().length) changeSuggestResult(event.shiftKey ? 38 : 40)
-        else changeSearchType()
+        if (jStartImages.length) return false
+        changeSearchType()
         return true
     }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -827,19 +1149,21 @@ function getstr() {
       <div class="j-search-view" id="j-search-view">
           <div class="jstart-border-effect" aria-hidden="true"></div>
           <div class="j-search-content" id="j-search-content">
-              <div class="j-search-icon-view">
+              <span class="j-search-icon-view" aria-hidden="true">
                   <span class="j-search-icon-view-span">
                       <svg focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
                           <path d="M10.8 18a7.2 7.2 0 1 1 5.1-2.1l4.1 4.1-1.6 1.6-4.1-4.1A7.1 7.1 0 0 1 10.8 18Zm0-2.2a5 5 0 1 0 0-10.1 5 5 0 0 0 0 10.1Z"></path>
                       </svg>
                   </span>
-              </div>
+              </span>
               <div class="j-input-view">
-                  <textarea class="j-input-view-input" id="j-input-view-input" maxlength="2048" name="q" rows="1" wrap="soft" autocapitalize="off" autocomplete="off" autocorrect="off" role="combobox" spellcheck="false" aria-label="搜索或输入网址"></textarea>
+                  <textarea class="j-input-view-input" id="j-input-view-input" name="q" rows="1" wrap="soft" autocapitalize="off" autocomplete="off" autocorrect="off" role="combobox" spellcheck="false" aria-label="搜索、提问或输入网址"></textarea>
+                  <div class="j-image-previews" id="j-image-previews" aria-label="已粘贴的图片" hidden></div>
+                  <span class="j-image-error" id="j-image-error" role="status" hidden></span>
                   <span class="j-parameter-error" id="j-parameter-error" role="status" hidden>请检查首行网址，参数行使用 名称=值 格式</span>
               </div>
               <div class="j-logo-view">
-                  <button class="j-logo-view-div" id="j-logo-view-button" aria-label="切换搜索平台" type="button">
+                  <button class="j-logo-view-div" id="j-logo-view-button" aria-label="切换入口" type="button">
                       <img class="j-logo-view-div-img" id="j-logo-view-logo" src="${SEARCH_LOGOS.google}" alt="">
                   </button>
                   <div class="j-parameter-controls" id="j-parameter-controls" hidden>

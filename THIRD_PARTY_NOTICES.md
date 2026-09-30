@@ -1,5 +1,16 @@
 # Third-party notices
 
+## AI answer rendering
+
+- [streaming-markdown](https://github.com/thetarnav/streaming-markdown), version 0.2.15, MIT. License: `vendor/streaming-markdown.LICENSE`.
+- [Temml](https://github.com/ronkok/Temml), version 0.13.5, MIT. License: `vendor/temml.LICENSE`. Loaded on demand for formulas rendered with the browser's MathML support.
+- [speed-highlight](https://github.com/speed-highlight/core), version 2.1.0, CC0-1.0. License: `vendor/speed-highlight/LICENSE`. Loaded on demand for fenced code blocks; uses its GitHub Dark web theme.
+- [opencc-js](https://github.com/nk2028/opencc-js), version 1.4.2, MIT and Apache-2.0. Licenses: `vendor/opencc.LICENSE` and `vendor/opencc.THIRD_PARTY_LICENSES.md`. Converts Google search suggestions to Simplified Chinese.
+
+See `vendor/README.md` for bundled file details.
+
+The MiMo provider icon (`icons/ai/mimo.jpg`) is the [official MiMo site favicon](https://mimo.mi.com/static/favicon.5c3d18dc51d9cbea.png), used to identify the selected provider.
+
 ## React Bits backgrounds
 
 Ghost Fibers, Letter Glitch, Soft Aurora, Floating Lines, Light Pillar, Light Rays, and Galaxy in the `backgrounds/`

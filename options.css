@@ -70,6 +70,23 @@ select {
     margin-top: 0;
 }
 
+.ai-settings { margin-bottom: 30px; }
+.ai-panels { display: grid; gap: 16px; }
+.ai-panel { border: 1px solid #30343d; border-radius: 8px; background: #191c23; }
+.ai-panel-header { padding: 18px 18px 0; }
+.ai-panel-header h3 { margin: 0; font-size: 15px; color: #f1f3f4; }
+.ai-panel-header p { margin: 5px 0 0; font-size: 12px; color: #9aa0a6; }
+.ai-fields { display: grid; gap: 14px; padding: 18px; }
+.ai-fields label { display: flex; flex-direction: column; gap: 7px; font-size: 13px; color: #bcc5d0; min-width: 0; }
+.ai-fields .ai-inline-field { display: grid; grid-template-columns: 100px minmax(0, 1fr); align-items: center; }
+.ai-fields input:not([type="checkbox"]), .ai-fields select, .ai-fields textarea { box-sizing: border-box; width: 100%; min-height: 36px; padding: 8px 10px; border: 1px solid #3c4043; border-radius: 6px; background: #111318; color: #f1f3f4; font: inherit; }
+.ai-fields textarea { resize: vertical; line-height: 1.6; }
+.ai-fields .ai-check { flex-direction: row; align-items: center; }
+.ai-semantic-status { color: #efb4a8; font-size: 12px; }
+.ai-fields [hidden] { display: none; }
+.ai-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+#ai-status { font-size: 12px; color: #a9e9eb; overflow-wrap: anywhere; }
+
 .appearance-fields {
     display: flex;
     gap: 12px;

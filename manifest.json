@@ -43,12 +43,27 @@
     "host_permissions": [
         "https://www.baidu.com/*",
         "https://suggestqueries.google.com/*",
-        "https://api.bing.com/*"
+        "https://api.bing.com/*",
+        "https://ark.cn-beijing.volces.com/*",
+        "https://api.deepseek.com/*",
+        "https://api.xiaomimimo.com/*",
+        "https://token-plan-cn.xiaomimimo.com/*"
     ],
     "web_accessible_resources": [
         {
             "resources": [
-                "jstart.css"
+                "jstart.css",
+                "ai-view.js",
+                "vendor/streaming-markdown.js",
+                "vendor/temml.js",
+                "vendor/temml.css",
+                "vendor/Temml.woff2",
+                "vendor/speed-highlight/index.js",
+                "vendor/speed-highlight/languages/*.js",
+                "vendor/speed-highlight/github-dark.css",
+                "icons/ai/*.svg",
+                "icons/ai/*.png",
+                "icons/ai/*.jpg"
             ],
             "matches": [
                 "<all_urls>"
@@ -62,6 +77,10 @@
                 "mac": "Command+J"
             },
             "description": "加载首页快捷键"
+        },
+        "command-global-home": {
+            "description": "全局唤起 JStart",
+            "global": true
         },
         "command-openinnewtab": {
             "suggested_key": {

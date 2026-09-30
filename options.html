@@ -43,6 +43,42 @@
             </div>
         </section>
 
+        <section class="settings-section ai-settings">
+            <header class="section-header">
+                <div>
+                    <h2>AI 快速问答</h2>
+                </div>
+            </header>
+            <div class="ai-panels">
+                <div class="ai-panel">
+                    <div class="ai-panel-header">
+                        <h3>大模型设置</h3>
+                        <p>请选择要使用的大模型</p>
+                    </div>
+                    <div class="ai-fields">
+                        <label class="ai-inline-field"><span>问答平台</span><select id="ai-provider"><option value="doubao">豆包 · 火山方舟</option><option value="deepseek">DeepSeek</option><option value="mimo">MiMo · 小米</option></select></label>
+                        <label class="ai-inline-field"><span>API Key</span><input id="ai-key" type="password" autocomplete="off" spellcheck="false"></label>
+                        <label class="ai-prompt-field"><span>系统提示词</span><textarea id="ai-prompt" rows="5"></textarea></label>
+                        <div class="ai-actions">
+                            <button id="ai-save" class="primary-button" type="button" title="保存提示词">保存提示词</button>
+                            <button id="ai-restore" class="ghost-button" type="button">恢复默认提示词</button>
+                            <span id="ai-status" role="status"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="ai-panel">
+                    <div class="ai-panel-header">
+                        <h3>搜索词语义识别</h3>
+                        <p>通过 DeepSeek 自动识别输入的内容是否适合大模型回答</p>
+                    </div>
+                    <div class="ai-fields">
+                        <label class="ai-check"><input id="ai-semantic-enabled" type="checkbox"><span>启用语义识别</span></label>
+                        <span id="ai-semantic-status" class="ai-semantic-status" hidden></span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section class="settings-section command-settings">
             <header class="section-header">
                 <div>
@@ -96,5 +132,6 @@
         </section>
     </main>
     <script src="options.js"></script>
+    <script type="module" src="options-ai.js"></script>
 </body>
 </html>
