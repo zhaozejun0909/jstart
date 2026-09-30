@@ -134,12 +134,12 @@ function saveFromEditor() {
         return
     }
 
-    const existingIndex = commands.findIndex(item => item.id === command.id)
     const duplicatedIndex = commands.findIndex(item => item.key === command.key && item.id !== command.id)
     if (duplicatedIndex >= 0) {
         commands.splice(duplicatedIndex, 1)
     }
 
+    const existingIndex = commands.findIndex(item => item.id === command.id)
     if (existingIndex >= 0) {
         commands.splice(existingIndex, 1, command)
     } else {

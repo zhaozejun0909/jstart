@@ -1,16 +1,6 @@
+import { createShaderBackground } from './shader-background.js'
+
 // Ported from React Bits Ghost Fibers. See THIRD_PARTY_NOTICES.md.
-
-const vertexShader = `#version 300 es
-const vec2 positions[3] = vec2[3](
-    vec2(-1.0, -1.0),
-    vec2(3.0, -1.0),
-    vec2(-1.0, 3.0)
-);
-
-void main() {
-    gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
-}
-`
 
 const fragmentShader = `#version 300 es
 precision highp float;
@@ -88,110 +78,9 @@ void main() {
 `
 
 export function createGhostFibers(container, options = {}) {
-    const canvas = document.createElement('canvas')
-    const gl = canvas.getContext('webgl2', {
-        alpha: false,
-        antialias: false,
-        powerPreference: 'low-power'
+    return createShaderBackground(container, {
+        fragmentShader,
+        fps: options.fps,
+        paused: options.paused
     })
-    if (!gl) throw new Error('WebGL 2 is unavailable')
-
-    const program = createProgram(gl, vertexShader, fragmentShader)
-    const resolutionLocation = gl.getUniformLocation(program, 'uResolution')
-    const timeLocation = gl.getUniformLocation(program, 'uTime')
-    const frameInterval = 1000 / (options.fps || 30)
-    let paused = Boolean(options.paused)
-    let frameId = 0
-    let lastFrame = 0
-    let lastTime = performance.now()
-    let elapsed = 0
-
-    canvas.setAttribute('aria-hidden', 'true')
-    container.appendChild(canvas)
-    gl.useProgram(program)
-
-    function resize() {
-        const width = Math.max(1, container.clientWidth)
-        const height = Math.max(1, container.clientHeight)
-        if (canvas.width === width && canvas.height === height) return
-        canvas.width = width
-        canvas.height = height
-        gl.viewport(0, 0, width, height)
-        draw()
-    }
-
-    function draw() {
-        gl.uniform2f(resolutionLocation, canvas.width, canvas.height)
-        gl.uniform1f(timeLocation, elapsed)
-        gl.drawArrays(gl.TRIANGLES, 0, 3)
-    }
-
-    function loop(now) {
-        frameId = requestAnimationFrame(loop)
-        elapsed += Math.min((now - lastTime) / 1000, 0.1)
-        lastTime = now
-        if (now - lastFrame < frameInterval) return
-        lastFrame = now
-        draw()
-    }
-
-    function start() {
-        if (paused || frameId) return
-        lastTime = performance.now()
-        frameId = requestAnimationFrame(loop)
-    }
-
-    function stop() {
-        cancelAnimationFrame(frameId)
-        frameId = 0
-    }
-
-    window.addEventListener('resize', resize)
-    resize()
-    draw()
-    start()
-
-    return {
-        setPaused(value) {
-            paused = Boolean(value)
-            if (paused) stop()
-            else start()
-        },
-        destroy() {
-            stop()
-            window.removeEventListener('resize', resize)
-            gl.deleteProgram(program)
-            canvas.remove()
-        }
-    }
-}
-
-function createProgram(gl, vertexSource, fragmentSource) {
-    const vertex = compileShader(gl, gl.VERTEX_SHADER, vertexSource)
-    const fragment = compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource)
-    const program = gl.createProgram()
-    gl.attachShader(program, vertex)
-    gl.attachShader(program, fragment)
-    gl.linkProgram(program)
-    gl.deleteShader(vertex)
-    gl.deleteShader(fragment)
-
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        const message = gl.getProgramInfoLog(program)
-        gl.deleteProgram(program)
-        throw new Error(message || 'Unable to link background shader')
-    }
-    return program
-}
-
-function compileShader(gl, type, source) {
-    const shader = gl.createShader(type)
-    gl.shaderSource(shader, source)
-    gl.compileShader(shader)
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        const message = gl.getShaderInfoLog(shader)
-        gl.deleteShader(shader)
-        throw new Error(message || 'Unable to compile background shader')
-    }
-    return shader
 }

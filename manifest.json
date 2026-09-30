@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "JStart",
-    "description": "自定义主页：支持百度、谷歌、必应搜索，也支持浏览器书签搜索，支持任意页面点击插件图标或者快捷键 Ctrl+J 调出插件页面，Tab键切换搜索，回车键搜索，CMD+回车在新的tab页打开选中结果",
+    "description": "自定义主页：支持百度、谷歌、必应搜索，也支持浏览器书签搜索，支持任意页面点击插件图标或使用全局快捷键调出搜索框，Tab键切换搜索，回车键搜索，CMD+回车在新的tab页打开选中结果",
     "version": "1.0.0",
     "icons": {
         "16": "logo-16.png",
@@ -25,7 +25,6 @@
                 "<all_urls>"
             ],
             "js": [
-                "jquery-3.6.1.slim.min.js",
                 "/content.js"
             ]
         }
@@ -37,6 +36,8 @@
     "permissions": [
         "storage",
         "tabs",
+        "scripting",
+        "activeTab",
         "bookmarks",
         "history"
     ],
@@ -55,9 +56,6 @@
                 "jstart.css",
                 "ai-view.js",
                 "vendor/streaming-markdown.js",
-                "vendor/temml.js",
-                "vendor/temml.css",
-                "vendor/Temml.woff2",
                 "vendor/speed-highlight/index.js",
                 "vendor/speed-highlight/languages/*.js",
                 "vendor/speed-highlight/github-dark.css",
@@ -71,23 +69,15 @@
         }
     ],
     "commands": {
-        "command-home": {
+        "_execute_action": {
             "suggested_key": {
                 "default": "Ctrl+Shift+J",
                 "mac": "Command+J"
-            },
-            "description": "加载首页快捷键"
+            }
         },
         "command-global-home": {
             "description": "全局唤起 JStart",
             "global": true
-        },
-        "command-openinnewtab": {
-            "suggested_key": {
-                "default": "Ctrl+N",
-                "mac": "Ctrl+N"
-            },
-            "description": "在新的tab页面打开搜索结果"
         },
         "command-toggle-previous-tab": {
             "suggested_key": {

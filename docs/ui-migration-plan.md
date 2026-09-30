@@ -10,7 +10,7 @@ Ghost Fibers 则直接使用原生 WebGL 2，未引入 OGL。本项目只需要�
 
 ## 1. 目标与实施边界
 
-在现有 HTML、CSS、JavaScript / jQuery 架构上，为新标签页接入可切换的 React Bits 背景，并将新标签页及网页内的搜索面板改为毛玻璃风格。
+在现有 HTML、CSS、JavaScript 架构上，为新标签页接入可切换的 React Bits 背景，并将新标签页及网页内的搜索面板改为毛玻璃风格。
 
 首版采用以下范围：
 

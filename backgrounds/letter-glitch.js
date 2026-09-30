@@ -31,7 +31,9 @@ export function createLetterGlitch(container, options = {}) {
         columns = Math.ceil(width / charWidth)
         const rows = Math.ceil(height / charHeight)
         letters = Array.from({ length: columns * rows }, randomLetter)
-        draw()
+        context.font = '16px monospace'
+        context.textBaseline = 'top'
+        letters.forEach(drawLetter)
     }
 
     function randomLetter() {
@@ -43,19 +45,21 @@ export function createLetterGlitch(container, options = {}) {
 
     function update() {
         const count = Math.max(1, Math.floor(letters.length * .05))
+        const changed = new Set()
         for (let index = 0; index < count; index++) {
-            letters[Math.floor(Math.random() * letters.length)] = randomLetter()
+            const position = Math.floor(Math.random() * letters.length)
+            letters[position] = randomLetter()
+            changed.add(position)
         }
+        changed.forEach(index => drawLetter(letters[index], index))
     }
 
-    function draw() {
-        context.clearRect(0, 0, canvas.width, canvas.height)
-        context.font = '16px monospace'
-        context.textBaseline = 'top'
-        letters.forEach((letter, index) => {
-            context.fillStyle = letter.color
-            context.fillText(letter.char, (index % columns) * charWidth, Math.floor(index / columns) * charHeight)
-        })
+    function drawLetter(letter, index) {
+        const x = (index % columns) * charWidth
+        const y = Math.floor(index / columns) * charHeight
+        context.clearRect(x, y, charWidth, charHeight)
+        context.fillStyle = letter.color
+        context.fillText(letter.char, x, y)
     }
 
     function loop(now) {
@@ -63,7 +67,6 @@ export function createLetterGlitch(container, options = {}) {
         if (now - lastFrame < frameInterval) return
         lastFrame = now
         update()
-        draw()
     }
 
     function start() {

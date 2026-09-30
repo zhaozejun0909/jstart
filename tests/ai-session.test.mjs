@@ -25,14 +25,17 @@ test('原 MiMo Key 可用于新增问答模型，语义识别改用 DeepSeek Key
     const provider = await new Promise(resolve => onMessage({ type: 'jstart:aiProvider' }, null, resolve))
     assert.equal(provider.id, 'mimo')
     assert.equal(provider.semanticEnabled, true)
+    assert.equal(provider.prompt, undefined)
+    assert.equal(provider.key, undefined)
     storedSettings = { providers: { doubao: { key: 'test-key' } } }
 })
 
 test('DeepSeek 按顺序回传本次会话的问答和图片', () => {
     const history = [{ question: '这是什么？', images: ['data:image/png;base64,AAAA'], answer: '一张图。' }]
-    const body = JSON.parse(buildAIRequest('deepseek', { key: 'test-key' }, '提示词', '再解释一下', [], history).body)
+    const body = JSON.parse(buildAIRequest('deepseek', { key: 'test-key', prompt: '提示词' }, '再解释一下', [], history).body)
     assert.equal(body.messages.length, 4)
     assert.equal(body.messages[0].role, 'system')
+    assert.equal(body.messages[0].content, '提示词')
     assert.equal(body.messages[1].content[1].image_url.url, history[0].images[0])
     assert.deepEqual(body.messages[2], { role: 'assistant', content: '一张图。' })
     assert.equal(body.messages[3].content, '再解释一下')
@@ -40,13 +43,14 @@ test('DeepSeek 按顺序回传本次会话的问答和图片', () => {
 
 test('MiMo Flash 使用官方鉴权和图片格式回传上下文，不提供联网工具', () => {
     const history = [{ question: '第一问', images: ['data:image/png;base64,AAAA'], answer: '第一答' }]
-    const request = buildAIRequest('mimo', { key: 'tp-test-key' }, '提示词', '第二问', [], history)
+    const request = buildAIRequest('mimo', { key: 'tp-test-key', prompt: '提示词' }, '第二问', [], history)
     const body = JSON.parse(request.body)
     assert.equal(request.headers['api-key'], 'tp-test-key')
     assert.equal(request.headers.Authorization, undefined)
     assert.equal(body.model, 'mimo-v2.6-flash')
     assert.equal(body.stream, true)
     assert.equal(body.tools, undefined)
+    assert.equal(body.messages[0].content, '提示词')
     assert.deepEqual(body.messages.map(message => message.role), ['system', 'user', 'assistant', 'user'])
     assert.equal(body.messages[1].content[1].image_url.url, history[0].images[0])
     assert.equal(body.messages[2].content, '第一答')
@@ -78,7 +82,8 @@ test('豆包不存储响应，手动回传完整的加密思考和回答', () =>
     const reasoning = { type: 'reasoning', id: 'rs-1', status: 'completed', encrypted_content: 'encrypted-payload', summary: [{ type: 'summary_text', text: '摘要' }] }
     const answer = { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '第一轮答案' }] }
     const history = [{ question: '第一问', images: [], output: [reasoning, answer] }]
-    const body = JSON.parse(buildAIRequest('doubao', { key: 'test-key' }, '提示词', '继续', [], history).body)
+    const body = JSON.parse(buildAIRequest('doubao', { key: 'test-key', prompt: '提示词' }, '继续', [], history).body)
+    assert.equal(body.instructions, '提示词')
     assert.equal(body.store, false)
     assert.equal(body.previous_response_id, undefined)
     assert.deepEqual(body.input.map(item => item.type || item.role), ['user', 'reasoning', 'message', 'user'])
@@ -129,4 +134,35 @@ test('MiMo Token Plan 流式回答走官方接口并保留本轮答案', async (
     assert.equal(endpoint, 'https://token-plan-cn.xiaomimimo.com/v1/chat/completions')
     assert.equal(events.find(event => event.type === 'context').context.answer, '回答')
     assert.equal(events.at(-1).type, 'done')
+})
+
+test('每轮问答读取后台最新提示词，前台旧提示词不能覆盖配置', async () => {
+    for (const provider of ['doubao', 'deepseek', 'mimo']) {
+        let body
+        let history = []
+        globalThis.fetch = async (url, options) => {
+            body = JSON.parse(options.body)
+            const frame = provider === 'doubao'
+                ? `data: ${JSON.stringify({ type: 'response.completed', response: { output: [
+                    { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '回答' }] }
+                ] } })}\n\n`
+                : 'data: {"choices":[{"delta":{"content":"回答"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'
+            return new Response(frame, { status: 200 })
+        }
+        for (const prompt of ['首次提示词', '更新后的提示词']) {
+            storedSettings = { providers: { [provider]: { key: 'test-key', prompt } } }
+            let ask
+            const events = []
+            onConnect({
+                name: 'jstart:ai', onDisconnect: { addListener() {} },
+                onMessage: { addListener(listener) { ask = listener } },
+                postMessage(event) { events.push(event) }
+            })
+            await ask({ type: 'ask', provider, question: '继续提问', images: [], history, prompt: '前台旧提示词' })
+            assert.equal(events.at(-1).type, 'done')
+            assert.equal(provider === 'doubao' ? body.instructions : body.messages[0].content, prompt)
+            history.push(events.find(event => event.type === 'context').context)
+        }
+    }
+    storedSettings = { providers: { doubao: { key: 'test-key' } } }
 })

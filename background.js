@@ -1,9 +1,6 @@
 /* eslint-disable */
 
 import './ai-background.js'
-import { Converter } from './vendor/opencc-t2cn.js'
-
-const toSimplified = Converter({ from: 't', to: 'cn' })
 
 const STORAGE_KEYS = {
     searchType: 'jStartSearchType',
@@ -41,7 +38,24 @@ const BUILTIN_COMMANDS = [
 
 let jstartSavedBookmarks = []
 let jstartSavedBookmarksIgnoreKey = ''
-const jstartTabSwitchStateByWindow = new Map()
+
+const MESSAGE_HANDLERS = {
+    baidu: request => requestSearch(request.searchWord, 'baidu'),
+    google: request => requestSearch(request.searchWord, 'google'),
+    bing: request => requestSearch(request.searchWord, 'bing'),
+    'jstart:searchLocal': request => searchLocal(request.text || ''),
+    'jstart:executeResult': request => executeResult(request.result, request.newTab),
+    'jstart:getCommands': async () => ({ commands: await getCustomCommands() }),
+    'jstart:saveCommands': async request => {
+        await saveCustomCommands(request.commands || [])
+        return { ok: true }
+    },
+    'jstart:getBookmarkSettings': () => getBookmarkSettings(),
+    'jstart:saveIgnoredBookmarkFolders': async request => {
+        await saveIgnoredBookmarkFolderIds(request.folderIds || [])
+        return { ok: true }
+    }
+}
 
 if (chrome.bookmarks) {
     chrome.bookmarks.onCreated.addListener(clearBookmarkCache)
@@ -52,24 +66,12 @@ if (chrome.bookmarks) {
 }
 
 chrome.commands.onCommand.addListener((command) => {
-    if (command === 'command-home') {
-        toShowJstartPage()
-    } else if (command === 'command-global-home') {
+    if (command === 'command-global-home') {
         toShowJstartPageGlobally()
-    } else if (command === 'command-openinnewtab') {
-        toOpenResultInNewTab()
     } else if (command === 'command-toggle-previous-tab') {
         toTogglePreviousTab()
     }
 });
-
-chrome.tabs.onActivated.addListener(activeInfo => {
-    recordTabActivation(activeInfo.tabId, activeInfo.windowId)
-})
-
-chrome.tabs.onRemoved.addListener(tabId => {
-    removeTabFromSwitchState(tabId)
-})
 
 chrome.action.onClicked.addListener(() => {
     toShowJstartPage()
@@ -77,94 +79,34 @@ chrome.action.onClicked.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request && request.searchWord) {
-        requestSearch(request.searchWord, request.type, sender && sender.tab && sender.tab.id, (result) => {
-            sendResponse(result)
-        })
-        return true
-    }
-
-    if (request && request.type === 'jstart:searchLocal') {
-        searchLocal(request.text || '')
-            .then(sendResponse)
-            .catch(error => sendResponse({ results: [], error: `${error}` }))
-        return true
-    }
-
-    if (request && request.type === 'jstart:executeResult') {
-        executeResult(request.result, request.newTab)
-            .then(sendResponse)
-            .catch(error => sendResponse({ ok: false, error: `${error}` }))
-        return true
-    }
-
-    if (request && request.type === 'jstart:getCommands') {
-        getCustomCommands()
-            .then(customCommands => sendResponse({ commands: customCommands }))
-            .catch(error => sendResponse({ commands: [], error: `${error}` }))
-        return true
-    }
-
-    if (request && request.type === 'jstart:saveCommands') {
-        saveCustomCommands(request.commands || [])
-            .then(() => sendResponse({ ok: true }))
-            .catch(error => sendResponse({ ok: false, error: `${error}` }))
-        return true
-    }
-
-    if (request && request.type === 'jstart:getBookmarkSettings') {
-        getBookmarkSettings()
-            .then(sendResponse)
-            .catch(error => sendResponse({ folders: [], ignoredFolderIds: [], error: `${error}` }))
-        return true
-    }
-
-    if (request && request.type === 'jstart:saveIgnoredBookmarkFolders') {
-        saveIgnoredBookmarkFolderIds(request.folderIds || [])
-            .then(() => sendResponse({ ok: true }))
-            .catch(error => sendResponse({ ok: false, error: `${error}` }))
-        return true
-    }
-
-    return false
+    if (!Object.hasOwn(MESSAGE_HANDLERS, request?.type)) return false
+    Promise.resolve()
+        .then(() => MESSAGE_HANDLERS[request.type](request))
+        .then(sendResponse)
+        .catch(error => sendResponse({ ok: false, error: `${error}` }))
+    return true
 })
 
-function requestSearch(text, type = 'baidu', tabId, callback) {
-    if (!text) return
+async function requestSearch(text, type = 'baidu') {
     const query = encodeURIComponent(text)
-    if (type === 'baidu') {
-        fetch(`https://www.baidu.com/sugrec?pre=1&p=3&json=1&prod=pc&from=pc_web&wd=${query}&csor=2&pwd=a`, {
-            headers: {
-                accept: 'application/json',
-                'content-type': 'application/json;charset=UTF-8',
-            },
-            method: 'GET'
-        }).then((response) => {
-            if (response.ok) return response.json()
-        }).then(data => {
-            const message = { type: 'baidu', query: text, data: data }
-            callback(message)
-            sendMessageToContentJS(message, tabId)
-        }).catch(() => callback({ type: 'baidu', query: text, data: null }))
-    } else if (type === 'google') {
-        fetch(`https://suggestqueries.google.com/complete/search?client=chrome&hl=zh-CN&gl=CN&q=${query}`).then(response => {
-            return response.json()
-        }).then(data => {
-            const suggestions = Array.isArray(data?.[1])
-                ? [...new Set(data[1].filter(item => typeof item === 'string').map(toSimplified))]
-                : []
-            const message = { type: 'google', query: text, data: suggestions }
-            callback(message)
-            sendMessageToContentJS(message, tabId)
-        }).catch(() => callback({ type: 'google', query: text, data: null }))
-    } else if (type === 'bing') {
-        fetch(`https://api.bing.com/osjson.aspx?query=${query}`).then(response => {
-            return response.json()
-        }).then(data => {
-            const message = { type: 'bing', query: text, data: data }
-            callback(message)
-            sendMessageToContentJS(message, tabId)
-        }).catch(() => callback({ type: 'bing', query: text, data: null }))
+    const urls = {
+        baidu: `https://www.baidu.com/sugrec?pre=1&p=3&json=1&prod=pc&from=pc_web&wd=${query}&csor=2&pwd=a`,
+        google: `https://suggestqueries.google.com/complete/search?client=chrome&hl=zh-CN&gl=CN&q=${query}`,
+        bing: `https://api.bing.com/osjson.aspx?query=${query}`
+    }
+    try {
+        if (!text || !urls[type]) return { type, query: text, data: [] }
+        const response = await fetch(urls[type], type === 'baidu' ? {
+            headers: { accept: 'application/json', 'content-type': 'application/json;charset=UTF-8' }
+        } : undefined)
+        if (!response.ok) throw new Error(`搜索建议请求失败（${response.status}）`)
+        const result = await response.json()
+        const suggestions = type === 'baidu' ? result?.g?.map(item => item.q) : result?.[1]
+        let data = Array.isArray(suggestions) ? suggestions.filter(item => typeof item === 'string' && item) : []
+        if (type === 'google') data = [...new Set(data)]
+        return { type, query: text, data }
+    } catch {
+        return { type, query: text, data: null }
     }
 }
 
@@ -273,7 +215,6 @@ async function searchBookmarks(query) {
 
     return bookmarks
         .filter(item => matchesQuery([item.title, item.url], query))
-        .slice(0, 20)
         .map(item => ({
             id: `bookmark:${item.id || item.url}`,
             usageKey: `bookmark:${item.url}`,
@@ -407,6 +348,7 @@ function createCustomCommandAction(command, argument) {
         type: 'command',
         title: `/${command.key} ${argument}`.trim(),
         subtitle: command.name || command.urlTemplate,
+        url: buildUrlFromTemplate(command.urlTemplate, argument),
         action: {
             kind: 'open_url_template',
             urlTemplate: command.urlTemplate,
@@ -495,29 +437,22 @@ function buildUrlFromTemplate(template, query) {
         .replaceAll('{raw}', raw)
 }
 
-function sendMessageToContentJS(message, tabId) {
-    if (tabId) {
-        chrome.tabs.sendMessage(tabId, message).catch(() => {})
-        return
-    }
-
-    chrome.tabs.query({ active: true, currentWindow: true }).then(tabs => {
-        const activeTab = tabs && tabs.length > 0 && tabs[0]
-        if (!activeTab || !activeTab.id) return
-        chrome.tabs.sendMessage(activeTab.id, message).catch(() => {})
-    })
-}
-
 async function toShowJstartPage(windowId, alwaysShow = false) {
     const query = windowId ? { active: true, windowId } : { active: true, currentWindow: true }
     const [tab] = await chrome.tabs.query(query)
     if (!tab || !tab.id) return
+    const message = { type: 'jstart', data: alwaysShow ? 'focusStartPage' : 'showStartPage' }
 
     try {
-        await chrome.tabs.sendMessage(tab.id, { type: 'jstart', data: alwaysShow ? 'focusStartPage' : 'showStartPage' })
+        await chrome.tabs.sendMessage(tab.id, message)
     } catch {
-        // 错误页等无法接收消息的页面，直接在当前标签页打开 JStart。
-        await chrome.tabs.update(tab.id, { url: chrome.runtime.getURL('newtab.html') })
+        try {
+            await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] })
+            await chrome.tabs.sendMessage(tab.id, message)
+        } catch {
+            // 无法注入的页面在新标签页打开，保留当前页面。
+            await chrome.tabs.create({ windowId: tab.windowId, url: chrome.runtime.getURL('newtab.html') })
+        }
     }
 }
 
@@ -558,74 +493,15 @@ function flatFromList(list, flatList, ignoredFolderIds) {
     })
 }
 
-function toOpenResultInNewTab() {
-    sendMessageToContentJS({ type: 'jstart', data: 'openResultInNewTab' })
-}
-
 async function toTogglePreviousTab() {
-    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
-    if (!activeTab || !activeTab.id) return
-
-    let state = getTabSwitchState(activeTab.windowId)
-    if (state.currentTabId !== activeTab.id) {
-        recordTabActivation(activeTab.id, activeTab.windowId)
-        state = getTabSwitchState(activeTab.windowId)
-    }
-
-    let targetTab = await getTabIfAvailable(state.previousTabId, activeTab.windowId)
-    if (!targetTab) {
-        targetTab = await findFallbackPreviousTab(activeTab)
-    }
-    if (!targetTab || !targetTab.id || targetTab.id === activeTab.id) return
+    const tabs = await chrome.tabs.query({ currentWindow: true })
+    const targetTab = tabs
+        .filter(tab => tab.id && !tab.active)
+        .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))[0]
+    if (!targetTab) return
 
     await chrome.tabs.update(targetTab.id, { active: true })
     await chrome.windows.update(targetTab.windowId, { focused: true })
-}
-
-function recordTabActivation(tabId, windowId) {
-    if (!tabId || !windowId) return
-    const state = getTabSwitchState(windowId)
-    if (state.currentTabId === tabId) return
-
-    jstartTabSwitchStateByWindow.set(windowId, {
-        currentTabId: tabId,
-        previousTabId: state.currentTabId || state.previousTabId || null
-    })
-}
-
-function removeTabFromSwitchState(tabId) {
-    if (!tabId) return
-    jstartTabSwitchStateByWindow.forEach((state, windowId) => {
-        const nextState = { ...state }
-        if (nextState.currentTabId === tabId) nextState.currentTabId = null
-        if (nextState.previousTabId === tabId) nextState.previousTabId = null
-        jstartTabSwitchStateByWindow.set(windowId, nextState)
-    })
-}
-
-function getTabSwitchState(windowId) {
-    return jstartTabSwitchStateByWindow.get(windowId) || {
-        currentTabId: null,
-        previousTabId: null
-    }
-}
-
-async function getTabIfAvailable(tabId, expectedWindowId) {
-    if (!tabId) return null
-    try {
-        const tab = await chrome.tabs.get(tabId)
-        if (expectedWindowId && tab.windowId !== expectedWindowId) return null
-        return tab
-    } catch (error) {
-        return null
-    }
-}
-
-async function findFallbackPreviousTab(activeTab) {
-    const tabs = await chrome.tabs.query({ windowId: activeTab.windowId })
-    return tabs
-        .filter(tab => tab.id && tab.id !== activeTab.id)
-        .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))[0]
 }
 
 async function getCustomCommands() {
@@ -763,7 +639,10 @@ function normalize(value) {
 }
 
 function normalizeCommandKey(value) {
-    return normalize(value).replace(/^\/+/, '').replace(/\s+/g, '-')
+    return `${value || ''}`
+        .toLowerCase()
+        .replace(/^\/+/, '')
+        .replace(/[^a-z0-9_-]/g, '')
 }
 
 function getUrlLabel(url) {

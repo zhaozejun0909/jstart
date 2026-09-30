@@ -4,7 +4,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (message.type === 'jstart:aiProvider') {
         loadSelectedAIProvider().then(({ id, provider, config, semanticEnabled }) => respond({
             id, name: provider.name, icon: provider.icon, model: provider.model,
-            prompt: config.prompt, configured: Boolean(config.key), semanticEnabled
+            configured: Boolean(config.key), semanticEnabled
         }))
         return true
     }
@@ -115,7 +115,7 @@ chrome.runtime.onConnect.addListener(port => {
             if (!provider || !config?.key) throw new Error('请先在设置中填写 API Key。')
             if (!message.question?.trim() && !message.images?.length) throw new Error('请输入问题。')
             send({ type: 'start', provider: message.provider, name: provider.name, model: provider.model })
-            const context = await streamAnswer(message.provider, config, message.prompt ?? config.prompt,
+            const context = await streamAnswer(message.provider, config,
                 message.question, message.images || [], message.history || [], controller.signal, send)
             send({ type: 'context', context })
             send({ type: 'done' })
@@ -128,13 +128,13 @@ chrome.runtime.onConnect.addListener(port => {
     })
 })
 
-export function buildAIRequest(id, config, prompt, question, images = [], history = []) {
+export function buildAIRequest(id, config, question, images = [], history = []) {
     const headers = { 'Content-Type': 'application/json' }
     if (id === 'mimo') headers['api-key'] = config.key
     else headers.Authorization = `Bearer ${config.key}`
     const body = { model: AI_PROVIDERS[id].model, stream: true }
     if (id !== 'doubao') {
-        body.messages = [{ role: 'system', content: prompt }]
+        body.messages = [{ role: 'system', content: config.prompt }]
         for (const turn of history) {
             body.messages.push({ role: 'user', content: chatUserContent(turn.question, turn.images) })
             body.messages.push({ role: 'assistant', content: turn.answer })
@@ -146,7 +146,7 @@ export function buildAIRequest(id, config, prompt, question, images = [], histor
             input.push(doubaoUserContent(turn.question, turn.images), ...turn.output)
         }
         input.push(doubaoUserContent(question, images))
-        Object.assign(body, { instructions: prompt, input, store: false })
+        Object.assign(body, { instructions: config.prompt, input, store: false })
         body.tools = [{ type: 'web_search', sources: ['search_engine'] }]
         headers['ark-beta-web-search'] = 'true'
     }
@@ -164,11 +164,11 @@ function doubaoUserContent(question, images = []) {
         ...images.map(image_url => ({ type: 'input_image', image_url }))] }
 }
 
-async function streamAnswer(id, config, prompt, question, images, history, signal, send) {
+async function streamAnswer(id, config, question, images, history, signal, send) {
     const endpoint = id === 'mimo' && /^(?:tp|ttp)-/.test(config.key)
         ? 'https://token-plan-cn.xiaomimimo.com/v1/chat/completions'
         : AI_PROVIDERS[id].endpoint
-    const response = await fetch(endpoint, { ...buildAIRequest(id, config, prompt, question, images, history), signal })
+    const response = await fetch(endpoint, { ...buildAIRequest(id, config, question, images, history), signal })
     if (!response.ok) {
         const error = await response.json().catch(() => null)
         throw new Error(`请求失败（${response.status}）：${error?.error?.message || '请检查 Key、模型权限或网络。'}`)

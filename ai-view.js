@@ -147,9 +147,6 @@ export function createAnswerView(root, { provider, question, images = [], histor
             node.parentElement.append(button)
             highlightCode(node)
         }
-        if (node.tagName === 'EQUATION-BLOCK' || node.tagName === 'EQUATION-INLINE') {
-            renderMath(node)
-        }
     }
     const parser = markdown.parser(renderer)
     function flush() {
@@ -162,21 +159,6 @@ export function createAnswerView(root, { provider, question, images = [], histor
             placeLoadingAtTextEnd()
         }
         follow()
-    }
-    async function renderMath(node) {
-        const tex = node.textContent
-        try {
-            const { default: temml } = await import('./vendor/temml.js')
-            if (!panel.isConnected || hasSelection()) return
-            if (!root.querySelector('[data-temml]')) {
-                const css = document.createElement('link')
-                css.rel = 'stylesheet'
-                css.href = chrome.runtime.getURL('vendor/temml.css')
-                css.dataset.temml = ''
-                root.append(css)
-            }
-            temml.render(tex, node, { displayMode: node.tagName === 'EQUATION-BLOCK', throwOnError: false, trust: false })
-        } catch { node.textContent = tex }
     }
     const port = chrome.runtime.connect({ name: 'jstart:ai' })
     let context
@@ -244,7 +226,7 @@ export function createAnswerView(root, { provider, question, images = [], histor
         const error = chrome.runtime.lastError
         if (!finished) finish(error?.message || '连接中断，可以重试。', true)
     })
-    port.postMessage({ type: 'ask', provider: provider.id, prompt: provider.prompt, question, images, history })
+    port.postMessage({ type: 'ask', provider: provider.id, question, images, history })
     return {
         show() {
             panel.hidden = false

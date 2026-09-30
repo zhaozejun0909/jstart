@@ -1,5 +1,11 @@
 /* eslint-disable */
 
+// 同一页面只初始化一次，避免自动注入与补注入同时响应消息。
+(() => {
+
+const existingMessageListener = globalThis.__jStartMessageListener
+if (existingMessageListener && chrome.runtime.onMessage.hasListener(existingMessageListener)) return
+
 let jStrartActived = false
 let jStartSearchType = 'google'
 let jStarttabStart = false
@@ -18,6 +24,7 @@ let jStartLoadingResultId = null
 let jStartLoadingUrl = ''
 let jStartAIProvider = null
 let jStartAIProviderRequest = null
+let jStartAIRouteRequests = new Map()
 let jStartAISession = null
 let jStartAIBusy = false
 let jStartAIViewPromise
@@ -41,34 +48,35 @@ const TYPE_LABELS = {
     command: '命令'
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+function handleJStartMessage(message, sender, sendResponse) {
     if (!message.type) return false
     if (message.type === 'jstart') {
         if (message.data === 'showStartPage' || message.data === 'focusStartPage') {
             showMainView(message.data === 'focusStartPage')
-        } else if (message.data === 'openResultInNewTab' && jStrartActived) {
-            submitCurrentInput(true)
         } else {
             return false
         }
-    } else if (message.type === 'google' || message.type === 'baidu' || message.type === 'bing') {
-        handleSearchResult(message)
     } else {
         return false
     }
     sendResponse(true)
     return false
-});
+}
+
+chrome.runtime.onMessage.addListener(handleJStartMessage)
+globalThis.__jStartMessageListener = handleJStartMessage
 
 chrome.storage?.onChanged?.addListener((changes, area) => {
     if (area === 'local' && jStrartActived && (changes.jStartAISettings || changes.jStartAIProvider)) loadAIProvider()
 })
 
 function showMainView(alwaysShow = false) {
-    if (document.getElementById('jstart-shadow-host')) {
+    if (jStartHost?.isConnected) {
         if (alwaysShow) focusOnSearch()
         else removeHTML()
     } else {
+        // 扩展重载后，旧脚本留下的面板不能继续使用。
+        document.getElementById('jstart-shadow-host')?.remove()
         insertHTML()
     }
 }
@@ -88,7 +96,7 @@ function insertHTML() {
     jStartHost.style.zIndex = '2147483647'
     jStartHost.style.visibility = 'hidden'
     document.documentElement.appendChild(jStartHost)
-    jStartRoot = jStartHost.attachShadow({ mode: 'open' })
+    jStartRoot = jStartHost.attachShadow({ mode: 'closed' })
     jStartRoot.innerHTML = `
         <link rel="stylesheet" href="${chrome.runtime.getURL('jstart.css')}">
         ${getstr()}
@@ -106,6 +114,7 @@ function insertHTML() {
     jStartInputVersion++
     jStartAISession = null
     jStartAIBusy = false
+    jStartAIRouteRequests = new Map()
 
     const view = getJStartElement('jstart-content-view')
     if (jStarttabStart) {
@@ -334,20 +343,12 @@ function getResultTargetUrl(result) {
     const action = result && result.action
     if (!action) return result && result.url ? result.url : ''
     if (action.kind === 'open_url') return action.url || result.url || ''
-    if (action.kind === 'open_url_template') return buildUrlFromTemplate(action.urlTemplate, action.query)
     return result && result.url ? result.url : ''
-}
-
-function buildUrlFromTemplate(template, query) {
-    const encoded = encodeURIComponent(query || '')
-    const raw = query || ''
-    return `${template || ''}`
-        .replaceAll('{query}', encoded)
-        .replaceAll('{raw}', raw)
 }
 
 function removeHTML() {
     clearAISession()
+    jStartAIRouteRequests = new Map()
     jStartImages = []
     jStartInputVersion++
     removePageShortcutBlockers()
@@ -372,12 +373,7 @@ async function handleImagePaste(event) {
     if (files.some(file => file.size > 5 * 1024 * 1024)) return fail('单张图片不能超过 5 MB。')
     const root = jStartRoot
     try {
-        const images = await Promise.all(files.map(file => new Promise((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve(reader.result)
-            reader.onerror = () => reject(reader.error)
-            reader.readAsDataURL(file)
-        })))
+        const images = await Promise.all(files.map(compressPastedImage))
         if (root !== jStartRoot) return
         jStartParameterMode = false
         jStartImages.push(...images)
@@ -387,6 +383,28 @@ async function handleImagePaste(event) {
     } catch {
         if (root === jStartRoot) fail('图片读取失败，请重新粘贴。')
     }
+}
+
+async function compressPastedImage(file) {
+    const image = await createImageBitmap(file)
+    const scale = Math.min(1, 1500 / Math.max(image.width, image.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(image.width * scale))
+    canvas.height = Math.max(1, Math.round(image.height * scale))
+    const context = canvas.getContext('2d')
+    context.fillStyle = '#fff'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    image.close()
+    const compressed = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9))
+    // 小图压缩后更大时保留原图；缩放过的图片始终使用缩放结果。
+    const result = scale === 1 && compressed.size >= file.size ? file : compressed
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = () => reject(reader.error)
+        reader.readAsDataURL(result)
+    })
 }
 
 function renderImagePreviews() {
@@ -414,30 +432,9 @@ function renderImagePreviews() {
 
 function handleSearchResult(result) {
     if (jStartSearchType === 'ai' || jStartParameterMode || jStartImages.length) return
-    if (result.type !== jStartSearchType || !result.data || result.query !== getInputValue()) return
+    if (result?.type !== jStartSearchType || !Array.isArray(result.data) || result.query !== getInputValue()) return
     if (parseNavigationUrl(getInputValue())) return
-
-    const type = result.type
-    const data = result.data
-    let list = []
-
-    if (type === 'baidu') {
-        try {
-            list = (data.g || []).map(item => createEngineResult(item.q))
-        } catch (error) {}
-    } else if (type === 'google') {
-        try {
-            list = data.filter(Boolean).map(createEngineResult)
-        } catch (error) {}
-    } else if (type === 'bing') {
-        try {
-            if (Array.isArray(data) && data.length > 1 && Array.isArray(data[1])) {
-                list = data[1].filter(Boolean).map(createEngineResult)
-            }
-        } catch (error) {}
-    }
-
-    updateSuggestions(() => { jStartEngineResults = list })
+    updateSuggestions(() => { jStartEngineResults = result.data.map(createEngineResult) })
 }
 
 function createEngineResult(title) {
@@ -471,6 +468,10 @@ function parseNavigationUrl(input) {
         const isIP = /^\d+\.\d+\.\d+\.\d+$/.test(host) || host.startsWith('[')
         const isDomain = host.includes('.') && host.split('.').every(label => /^[a-z\d](?:[a-z\d-]*[a-z\d])?$/i.test(label))
         if (!isLocal && !isIP && !isDomain) return null
+        // 无协议输入排除常见文件后缀；明确带协议的链接仍可直接打开。
+        const fileSuffixes = ['js', 'jsx', 'mjs', 'cjs', 'json', 'ts', 'tsx', 'css', 'scss', 'sass', 'less',
+            'html', 'htm', 'xml', 'yaml', 'yml', 'txt', 'md', 'zip']
+        if (!isLocal && !isIP && fileSuffixes.includes(host.split('.').at(-1))) return null
         // 不把纯数字误识别成 URL；URL 解析器会把它转换成 IPv4。
         if (isIP && !/[.\[]/.test(text.split(/[/?#]/)[0])) return null
         return isLocal || isIP ? new URL(`http://${text}`).href : url.href
@@ -533,9 +534,11 @@ function onInputChange() {
         chrome.runtime.sendMessage(chrome.runtime.id, {
             type: jStartSearchType,
             searchWord: text
+        }).then(result => {
+            if (inputVersion === jStartInputVersion) handleSearchResult(result)
         }).catch(() => {})
         if (!/\s$/.test(text) && jStartAIProvider?.semanticEnabled) {
-            chrome.runtime.sendMessage({ type: 'jstart:classifyAI', text }).then(result => {
+            requestAIRoute(text).then(result => {
                 if (result?.route !== 'ai' || inputVersion !== jStartInputVersion || text !== getInputValue() || jStartSearchType === 'ai') return
                 updateSuggestions(() => {
                     jStartAIResult = {
@@ -549,6 +552,18 @@ function onInputChange() {
     }
 
     renderSuggest()
+}
+
+function requestAIRoute(text) {
+    const cache = jStartAIRouteRequests
+    if (!cache.has(text)) {
+        const request = chrome.runtime.sendMessage({ type: 'jstart:classifyAI', text }).catch(error => {
+            cache.delete(text)
+            throw error
+        })
+        cache.set(text, request)
+    }
+    return cache.get(text)
 }
 
 function requestLocalResults(text, inputVersion) {
@@ -581,7 +596,9 @@ function renderSuggest() {
     const showLocal = jStartLocalResults.length > 0
     if (!showEngine && !showLocal) return
 
-    const suggestHtml = $('<div class="jstart-suggest-view" id="jstart-suggest-view"></div>')
+    const suggestHtml = document.createElement('div')
+    suggestHtml.className = 'jstart-suggest-view'
+    suggestHtml.id = 'jstart-suggest-view'
     if (showLocal) {
         const title = jStartLocalResults[0].type === 'url' ? '直接打开' : getInputValue().startsWith('/') ? '命令与本地结果' : '其他'
         appendSuggestSection(suggestHtml, title, jStartLocalResults)
@@ -590,7 +607,7 @@ function renderSuggest() {
         appendSuggestSection(suggestHtml, '搜索建议', jStartAIResult ? [jStartAIResult, ...jStartEngineResults] : jStartEngineResults)
     }
 
-    getJStartElement('j-search-view').appendChild(suggestHtml[0])
+    getJStartElement('j-search-view').append(suggestHtml)
     if (jStartSuggestSelectedIndex < 0 && showLocal) {
         jStartSuggestSelectedIndex = 0
     }
@@ -598,42 +615,48 @@ function renderSuggest() {
 }
 
 function appendSuggestSection(container, title, results) {
-    const header = $('<div class="jstart-suggest-section"></div>')
-    header.text(title)
+    const header = document.createElement('div')
+    header.className = 'jstart-suggest-section'
+    header.textContent = title
     container.append(header)
 
     results.forEach(result => {
         const globalIndex = getResultIndex(result)
-        const item = $('<button type="button" class="jstart-suggest-view-item"></button>')
-        item.attr('data-index', globalIndex)
+        const item = document.createElement('button')
+        item.type = 'button'
+        item.className = 'jstart-suggest-view-item'
+        item.dataset.index = globalIndex
         item.append(createTypeIcon(result.type))
 
-        const content = $('<span class="jstart-suggest-content"></span>')
-        const titleNode = $('<span class="jstart-suggest-title"></span>')
-        const subtitleNode = $('<span class="jstart-suggest-subtitle"></span>')
+        const content = document.createElement('span')
+        content.className = 'jstart-suggest-content'
+        const titleNode = document.createElement('span')
+        titleNode.className = 'jstart-suggest-title'
+        const subtitleNode = document.createElement('span')
+        subtitleNode.className = 'jstart-suggest-subtitle'
         const isLoading = result.id === jStartLoadingResultId
         const subtitle = isLoading
             ? `正在打开 ${jStartLoadingUrl || getResultTargetUrl(result) || result.title || ''}`
             : result.type === 'engine' ? '' : result.subtitle || TYPE_LABELS[result.type] || ''
-        titleNode.text(result.title || '')
-        subtitleNode.text(subtitle)
-        subtitleNode.prop('hidden', !subtitle)
-        content.append(titleNode)
-        content.append(subtitleNode)
+        titleNode.textContent = result.title || ''
+        subtitleNode.textContent = subtitle
+        subtitleNode.hidden = !subtitle
+        content.append(titleNode, subtitleNode)
         item.append(content)
-        item.toggleClass('jstart-loading-result', isLoading)
+        item.classList.toggle('jstart-loading-result', isLoading)
 
-        const tag = $('<span class="jstart-suggest-tag"></span>')
-        tag.text(TYPE_LABELS[result.type] || '其他')
+        const tag = document.createElement('span')
+        tag.className = 'jstart-suggest-tag'
+        tag.textContent = TYPE_LABELS[result.type] || '其他'
         item.append(tag)
 
-        item.on('mouseenter', function () {
-            jStartSuggestSelectedIndex = Number($(this).attr('data-index'))
+        item.addEventListener('mouseenter', () => {
+            jStartSuggestSelectedIndex = globalIndex
             jStartUserSelectedResult = true
             refreshSuggestHilight()
         })
-        item.on('click', function () {
-            jStartSuggestSelectedIndex = Number($(this).attr('data-index'))
+        item.addEventListener('click', () => {
+            jStartSuggestSelectedIndex = globalIndex
             jStartUserSelectedResult = true
             const selected = getSuggestSelected()
             if (selected) executeSuggestResult(selected, false)
@@ -654,10 +677,16 @@ function getResultIndex(result) {
 }
 
 function createTypeIcon(type) {
-    const icon = $('<span class="jstart-type-icon"></span>')
-    icon.addClass(`jstart-type-icon-${type}`)
-    if (type === 'ai') icon.append($('<img alt="">').attr('src', chrome.runtime.getURL(jStartAIProvider.icon)))
-    else icon.html(getIconSvg(type))
+    const icon = document.createElement('span')
+    icon.className = `jstart-type-icon jstart-type-icon-${type}`
+    if (type === 'ai') {
+        const image = document.createElement('img')
+        image.alt = ''
+        image.src = chrome.runtime.getURL(jStartAIProvider.icon)
+        icon.append(image)
+    } else {
+        icon.innerHTML = getIconSvg(type)
+    }
     return icon
 }
 
@@ -706,14 +735,12 @@ function changeSuggestResult(keyCode) {
 
 function refreshSuggestHilight() {
     getJStartElements('.jstart-suggest-view-item').forEach(ele => {
-        const itemIndex = Number($(ele).attr('data-index'))
-        if (itemIndex === jStartSuggestSelectedIndex) {
-            $(ele).addClass('jstart-selected')
+        const selected = Number(ele.dataset.index) === jStartSuggestSelectedIndex
+        ele.classList.toggle('jstart-selected', selected)
+        if (selected) {
             ele.scrollIntoView({
                 block: 'nearest'
             })
-        } else {
-            $(ele).removeClass('jstart-selected')
         }
     })
 }
@@ -735,6 +762,7 @@ async function loadAIProvider() {
     const provider = await request
     if (root !== jStartRoot || request !== jStartAIProviderRequest) return
     jStartAIProvider = provider
+    jStartAIRouteRequests = new Map()
     refreshLogo()
     if (getInputValue() || jStartImages.length) onInputChange()
 }
@@ -1057,14 +1085,7 @@ function blockPageShortcut(event) {
 
 function isJStartInputActive() {
     const input = getJStartElement('j-input-view-input')
-    if (!input) return false
-    return getDeepActiveElement() === input
-}
-
-function getDeepActiveElement(root = document) {
-    const active = root.activeElement
-    if (active && active.shadowRoot) return getDeepActiveElement(active.shadowRoot)
-    return active
+    return Boolean(input && jStartRoot.activeElement === input)
 }
 
 function isJStartControlKey(event) {
@@ -1179,7 +1200,11 @@ function getstr() {
 const envMeta = document.getElementsByTagName('meta')['newtab-jstart-flag']
 jStarttabStart = envMeta && envMeta.content && envMeta.content === 'true'
 if (jStarttabStart) {
-    $(document).ready(function () {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => showMainView(), { once: true })
+    } else {
         showMainView()
-    })
+    }
 }
+
+})()
