@@ -1,12 +1,14 @@
 /* eslint-disable */
 
-// 同一页面只初始化一次，避免自动注入与补注入同时响应消息。
+// 同一页面只初始化一次，避免连续唤起时重复注入，出现两个实例同时响应消息。
 (() => {
 
 const existingMessageListener = globalThis.__jStartMessageListener
 if (existingMessageListener && chrome.runtime.onMessage.hasListener(existingMessageListener)) return
 
 let jStrartActived = false
+// 一级入口：search 或 ai；二级入口分别是 jStartSearchType（搜索引擎）和 jStartAIProvider（大模型）。
+let jStartMode = 'search'
 let jStartSearchType = 'google'
 let jStarttabStart = false
 let jStartEngineResults = []
@@ -30,7 +32,18 @@ let jStartAIBusy = false
 let jStartAIViewPromise
 let jStartAIRequestVersion = 0
 let jStartLocalRequest = null
+// 语义识别在输入防抖（120ms）之后再等的时间。
+const AI_ROUTE_DELAY = 300
+// 超过这个字数才做语义识别，太短的输入基本是关键词搜索。
+const AI_ROUTE_MIN_LENGTH = 3
 let jStartImages = []
+// 鼠标悬停在入口图标上多久后弹出二级选项，以及移开后多久收起。
+const ENTRY_MENU_DELAY = 500
+const ENTRY_MENU_CLOSE_DELAY = 250
+let jStartEntryMenuTimer = 0
+
+const SEARCH_ENGINES = ['google', 'baidu', 'bing']
+const ENGINE_NAMES = { google: 'Google', baidu: '百度', bing: '必应' }
 
 const SEARCH_LOGOS = {
     google: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PHBhdGggZmlsbD0iI0ZCQkMwNSIgZD0iTTQzLjYgMjAuNUgyNHY3LjloMTEuM0MzNC4yIDMzLjcgMjkuOCAzNyAyNCAzN2MtNy4yIDAtMTMtNS44LTEzLTEzczUuOC0xMyAxMy0xM2MzLjEgMCA1LjkgMS4xIDguMSAyLjlsNS42LTUuNkMzNC4xIDQuNSAyOS4zIDIgMjQgMiAxMS44IDIgMiAxMS44IDIgMjRzOS44IDIyIDIyIDIyYzExIDAgMjEtOCAyMS0yMiAwLTEuMy0uMS0yLjQtLjQtMy41eiIvPjxwYXRoIGZpbGw9IiNFQTQzMzUiIGQ9Ik02LjMgMTQuN2w2LjYgNC44QzE0LjcgMTQuNiAxOSAzMSAyNCAzMWMzLjEgMCA1LjktMS4xIDguMS0yLjlsNS42IDUuNkMzNC4xIDM3LjUgMjkuMyA0MCAyNCA0MGMtOC44IDAtMTYtNy4yLTE2LTE2IDAtMy4zIDEuMS02LjQgMy4zLTkuM3oiLz48cGF0aCBmaWxsPSIjMzRBODUzIiBkPSJNNi4zIDMzLjNsNi42LTQuOEMxNC43IDMzLjQgMTkgMzcgMjQgMzdjMy4xIDAgNS45LTEuMSA4LjEtMi45bDUuNiA1LjZDMzQuMSA0My41IDI5LjMgNDYgMjQgNDYgMTYuMSA0NiA5LjIgNDEuOCA1LjMgMzUuNXoiLz48cGF0aCBmaWxsPSIjNDI4NUY0IiBkPSJNNDUgMjRjMC0xLjMtLjEtMi40LS40LTMuNUgyNHY3LjloMTEuM0MzNC44IDMxIDMwLjUgMzcgMjQgMzdjLTMuMSAwLTUuOS0xLjEtOC4xLTIuOWwtNS42IDUuNkMxNC4xIDQzLjUgMTguOSA0NiAyNCA0NmMxMSAwIDIxLTggMjEtMjJ6Ii8+PC9zdmc+',
@@ -66,9 +79,13 @@ function handleJStartMessage(message, sender, sendResponse) {
 chrome.runtime.onMessage.addListener(handleJStartMessage)
 globalThis.__jStartMessageListener = handleJStartMessage
 
-chrome.storage?.onChanged?.addListener((changes, area) => {
-    if (area === 'local' && jStrartActived && (changes.jStartAISettings || changes.jStartAIProvider)) loadAIProvider()
-})
+// 只在面板打开期间监听；常驻监听会让每个网页都收到所有 storage 写入。
+function handleStorageChange(changes, area) {
+    if (area !== 'local' || !(changes.jStartAISettings || changes.jStartAIProvider)) return
+    // 本页刚切换的模型已经在本地更新过，不必重新加载。
+    if (!changes.jStartAISettings && changes.jStartAIProvider.newValue === jStartAIProvider?.id) return
+    loadAIProvider()
+}
 
 function showMainView(alwaysShow = false) {
     if (jStartHost?.isConnected) {
@@ -124,15 +141,14 @@ function insertHTML() {
         view.classList.add('jstart-content-visible')
     }
 
-    chrome.storage.local.get('jStartSearchType', function (result) {
-        if (result && result.jStartSearchType) {
-            jStartSearchType = result.jStartSearchType
-        }
+    chrome.storage.local.get(['jStartMode', 'jStartSearchType'], function (result) {
+        applyEntrySettings(result)
         refreshLogo()
         onInputChange()
         revealAfterStyleLoaded()
     })
     loadAIProvider()
+    chrome.storage.onChanged.addListener(handleStorageChange)
 
     const input = getJStartElement('j-input-view-input')
     input.addEventListener('keydown', handleJStartKeydown, true)
@@ -148,7 +164,13 @@ function insertHTML() {
         jStartIsComposing = false
         refreshDebounced()
     })
-    getJStartElement('j-logo-view-button').addEventListener('click', changeSearchType)
+    const logoButton = getJStartElement('j-logo-view-button')
+    const entry = getJStartElement('j-entry')
+    logoButton.addEventListener('click', handleLogoClick)
+    logoButton.addEventListener('pointerenter', () => scheduleEntryMenu(true))
+    // 鼠标在图标和二级选项之间移动时会短暂离开，收起前留一点余量。
+    entry.addEventListener('pointerenter', () => { if (isEntryMenuOpen()) clearTimeout(jStartEntryMenuTimer) })
+    entry.addEventListener('pointerleave', () => scheduleEntryMenu(false))
     getJStartElement('j-parameter-mode-button').addEventListener('click', toggleParameterMode)
     getJStartElement('j-image-previews').addEventListener('click', event => {
         const index = event.target.closest('[data-image-index]')?.dataset.imageIndex
@@ -197,7 +219,7 @@ async function submitCurrentInput(newTab) {
     }
 
     if (!value.startsWith('/')) {
-        if (jStartSearchType === 'ai') startAIAnswer(value)
+        if (jStartMode === 'ai') startAIAnswer(value)
         else handleKeywordSearch(value, newTab)
     }
 }
@@ -219,9 +241,10 @@ function executeSuggestResult(result, newTab) {
     }
     if (result.type === 'ai') {
         const question = getInputValue()
-        jStartSearchType = 'ai'
-        chrome.storage.local.set({ jStartSearchType })
+        jStartMode = 'ai'
+        chrome.storage.local.set({ jStartMode })
         refreshLogo()
+        playLogoSwitch()
         onInputChange()
         startAIAnswer(question)
         return
@@ -234,7 +257,9 @@ function executeSuggestResult(result, newTab) {
     chrome.runtime.sendMessage(chrome.runtime.id, {
         type: 'jstart:executeResult',
         result,
-        newTab: effectiveNewTab
+        newTab: effectiveNewTab,
+        // 新标签页没有 AI 对话时，切到已打开的 Tab 后可以关掉。
+        closeSourceTab: jStarttabStart && !jStartAISession
     }).then(response => {
         if (response && response.ok === false) throw new Error(response.error || '无法打开，请重试')
         if (inputVersion !== jStartInputVersion) return
@@ -352,12 +377,15 @@ function removeHTML() {
     jStartImages = []
     jStartInputVersion++
     removePageShortcutBlockers()
+    clearTimeout(jStartEntryMenuTimer)
     window.removeEventListener('resize', resizeSearchInput)
     if (jStartHost) jStartHost.remove()
     jStartHost = null
     jStartRoot = null
     jStrartActived = false
     setNewTabGuideVisible(true)
+    // 放在最后：扩展重载后旧脚本调用 Chrome API 可能报错，不能影响面板关闭。
+    chrome.storage.onChanged.removeListener(handleStorageChange)
 }
 
 async function handleImagePaste(event) {
@@ -373,7 +401,9 @@ async function handleImagePaste(event) {
     if (files.some(file => file.size > 5 * 1024 * 1024)) return fail('单张图片不能超过 5 MB。')
     const root = jStartRoot
     try {
-        const images = await Promise.all(files.map(compressPastedImage))
+        // 逐张解码，避免几张大图同时展开占用内存。
+        const images = []
+        for (const file of files) images.push(await compressPastedImage(file))
         if (root !== jStartRoot) return
         jStartParameterMode = false
         jStartImages.push(...images)
@@ -431,7 +461,7 @@ function renderImagePreviews() {
 }
 
 function handleSearchResult(result) {
-    if (jStartSearchType === 'ai' || jStartParameterMode || jStartImages.length) return
+    if (jStartMode === 'ai' || jStartParameterMode || jStartImages.length) return
     if (result?.type !== jStartSearchType || !Array.isArray(result.data) || result.query !== getInputValue()) return
     if (parseNavigationUrl(getInputValue())) return
     updateSuggestions(() => { jStartEngineResults = result.data.map(createEngineResult) })
@@ -520,7 +550,7 @@ function onInputChange() {
             subtitle: url.startsWith('file:') ? '打开本地文件' : '打开网址',
             action: { kind: 'open_url', url }
         }]
-        jStartEngineResults = jStartSearchType === 'ai' ? [] : [createEngineResult(text.trim())]
+        jStartEngineResults = jStartMode === 'ai' ? [] : [createEngineResult(text.trim())]
         jStartSuggestSelectedIndex = 0
         renderSuggest()
         return
@@ -530,24 +560,31 @@ function onInputChange() {
         jStartLocalRequest = requestLocalResults(text, inputVersion)
     }
 
-    if (jStartSearchType !== 'ai' && !text.startsWith('/')) {
+    if (jStartMode !== 'ai' && !text.startsWith('/')) {
         chrome.runtime.sendMessage(chrome.runtime.id, {
             type: jStartSearchType,
             searchWord: text
         }).then(result => {
             if (inputVersion === jStartInputVersion) handleSearchResult(result)
         }).catch(() => {})
-        if (!/\s$/.test(text) && jStartAIProvider?.semanticEnabled) {
-            requestAIRoute(text).then(result => {
-                if (result?.route !== 'ai' || inputVersion !== jStartInputVersion || text !== getInputValue() || jStartSearchType === 'ai') return
-                updateSuggestions(() => {
-                    jStartAIResult = {
-                        id: `ai:${text}`, type: 'ai',
-                        title: '问问 AI 吧',
-                        subtitle: '此问题更适合 AI 回答哦'
-                    }
-                })
-            }).catch(() => {})
+        if (!/\s$/.test(text) && text.trim().length > AI_ROUTE_MIN_LENGTH && jStartAIProvider?.semanticEnabled) {
+            const route = () => {
+                // 版本号要等输入防抖结束才更新，所以还要比较当前文字，避免发送已经改掉的输入。
+                if (inputVersion !== jStartInputVersion || text !== getInputValue()) return
+                requestAIRoute(text).then(result => {
+                    if (result?.route !== 'ai' || inputVersion !== jStartInputVersion || text !== getInputValue() || jStartMode === 'ai') return
+                    updateSuggestions(() => {
+                        jStartAIResult = {
+                            id: `ai:${text}`, type: 'ai',
+                            title: '问问 AI 吧',
+                            subtitle: '此问题更适合 AI 回答哦'
+                        }
+                    })
+                }).catch(() => {})
+            }
+            // 判断过的文字直接复用；新文字等输入再停顿一会儿才请求，避免打字过程中反复调用大模型。
+            if (jStartAIRouteRequests.has(text)) route()
+            else setTimeout(route, AI_ROUTE_DELAY)
         }
     }
 
@@ -745,14 +782,143 @@ function refreshSuggestHilight() {
     })
 }
 
-function changeSearchType() {
+// 读取上次的入口；旧版本把 AI 也存在 jStartSearchType 里，这里一并兼容。
+function applyEntrySettings(result) {
+    const stored = result?.jStartSearchType
+    jStartMode = ['search', 'ai'].includes(result?.jStartMode) ? result.jStartMode : stored === 'ai' ? 'ai' : 'search'
+    jStartSearchType = SEARCH_ENGINES.includes(stored) ? stored : 'google'
+}
+
+// 带图片时只能问 AI，一级入口固定为 AI。
+function isAIEntry() {
+    return jStartMode === 'ai' || jStartImages.length > 0
+}
+
+function toggleEntryMode() {
+    hideEntryMenu()
     if (jStartImages.length) return
-    const types = ['google', 'baidu', 'bing', 'ai']
-    jStartSearchType = types[(types.indexOf(jStartSearchType) + 1) % types.length]
-    chrome.storage.local.set({ jStartSearchType })
+    jStartMode = jStartMode === 'ai' ? 'search' : 'ai'
+    chrome.storage.local.set({ jStartMode })
     refreshLogo()
+    playLogoSwitch()
     onInputChange()
     focusOnSearch()
+}
+
+// 切换后新图标放大回弹一下，提示已经选中。
+function playLogoSwitch() {
+    const logo = getJStartElement('j-logo-view-logo')
+    if (!logo || matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    logo.animate([
+        { transform: 'scale(.6)' },
+        { transform: 'scale(1.25)', offset: .55 },
+        { transform: 'scale(.94)', offset: .8 },
+        { transform: 'scale(1)' }
+    ], { duration: 360, easing: 'ease-out' })
+}
+
+// 当前模式下的二级选项：搜索引擎或大模型。未配置 Key 的模型也列出，选中时去设置页。
+function getEntryOptions() {
+    if (isAIEntry()) {
+        return (jStartAIProvider?.providers || []).map(item => ({
+            id: item.id, name: item.name, icon: chrome.runtime.getURL(item.icon),
+            available: item.configured, active: item.id === jStartAIProvider.id
+        }))
+    }
+    return SEARCH_ENGINES.map(id => ({
+        id, name: ENGINE_NAMES[id], icon: SEARCH_LOGOS[id], available: true, active: id === jStartSearchType
+    }))
+}
+
+// 依次切到下一个二级选项，跳过未配置 Key 的模型。
+function cycleEntryOption() {
+    hideEntryMenu()
+    const options = getEntryOptions().filter(option => option.available || option.active)
+    if (!options.some(option => option.available)) return showAIOptions()
+    const next = options[(options.findIndex(option => option.active) + 1) % options.length]
+    if (!next.active) selectEntryOption(next.id)
+}
+
+function selectEntryOption(id) {
+    hideEntryMenu()
+    if (isAIEntry()) {
+        const option = jStartAIProvider?.providers?.find(item => item.id === id)
+        if (!option?.configured) return showAIOptions()
+        // 选的就是当前模型时不做任何改动，也不播放切换效果。
+        if (id === jStartAIProvider.id) return focusOnSearch()
+        // 对话进行中也可以切换，从下一问开始使用新模型。
+        jStartAIProvider = { ...jStartAIProvider, ...option }
+        chrome.storage.local.set({ jStartAIProvider: id })
+        refreshLogo()
+    } else {
+        if (id === jStartSearchType) return focusOnSearch()
+        jStartSearchType = id
+        chrome.storage.local.set({ jStartSearchType })
+        refreshLogo()
+        onInputChange()
+    }
+    playLogoSwitch()
+    focusOnSearch()
+}
+
+function handleLogoClick() {
+    toggleEntryMode()
+    focusOnSearch()
+    // 鼠标仍停在图标上时重新计时，稍后弹出新模式的二级选项。
+    if (getJStartElement('j-logo-view-button')?.matches(':hover')) scheduleEntryMenu(true)
+}
+
+function isEntryMenuOpen() {
+    return Boolean(getJStartElement('j-entry-menu')?.classList.contains('j-entry-menu-open'))
+}
+
+function scheduleEntryMenu(open) {
+    clearTimeout(jStartEntryMenuTimer)
+    if (open === isEntryMenuOpen()) return
+    jStartEntryMenuTimer = setTimeout(open ? showEntryMenu : hideEntryMenu, open ? ENTRY_MENU_DELAY : ENTRY_MENU_CLOSE_DELAY)
+}
+
+// 二级选项从图标位置弹出，沿图标右侧的半圆排开；右侧空间不够时改到左侧。
+function showEntryMenu() {
+    const menu = getJStartElement('j-entry-menu')
+    const button = getJStartElement('j-logo-view-button')
+    const options = getEntryOptions()
+    if (!menu || !button || !options.length) return
+    const radius = 46
+    const side = button.getBoundingClientRect().right + radius + 24 <= window.innerWidth ? 1 : -1
+    const step = options.length > 1 ? 110 / (options.length - 1) : 0
+    menu.replaceChildren(...options.map((option, index) => {
+        const angle = (index - (options.length - 1) / 2) * step * Math.PI / 180
+        const item = document.createElement('button')
+        item.type = 'button'
+        item.className = 'j-entry-option'
+        item.classList.toggle('j-entry-option-unavailable', !option.available)
+        item.setAttribute('role', 'menuitemradio')
+        item.setAttribute('aria-checked', String(option.active))
+        item.setAttribute('aria-label', option.name)
+        item.title = option.available ? option.name : `${option.name} · 未配置，点击去设置`
+        item.style.setProperty('--x', `${Math.round(side * radius * Math.cos(angle))}px`)
+        item.style.setProperty('--y', `${Math.round(radius * Math.sin(angle))}px`)
+        item.style.setProperty('--i', index)
+        const image = document.createElement('img')
+        image.alt = ''
+        image.src = option.icon
+        item.append(image)
+        // 点击时不抢走输入框的焦点。
+        item.addEventListener('pointerdown', event => event.preventDefault())
+        item.addEventListener('click', () => selectEntryOption(option.id))
+        return item
+    }))
+    getJStartElement('j-search-view').classList.add('j-entry-open')
+    // 先按收起状态排版一次，展开时才会有从图标弹出的过渡。
+    menu.getBoundingClientRect()
+    menu.classList.add('j-entry-menu-open')
+}
+
+function hideEntryMenu() {
+    clearTimeout(jStartEntryMenuTimer)
+    getJStartElement('j-entry-menu')?.classList.remove('j-entry-menu-open')
+    getJStartElement('j-search-view')?.classList.remove('j-entry-open')
 }
 
 async function loadAIProvider() {
@@ -767,8 +933,9 @@ async function loadAIProvider() {
     if (getInputValue() || jStartImages.length) onInputChange()
 }
 
+// 每一问都用当前选中的模型；对话中途切换后，之前的问答会转成新模型能用的格式带过去。
 function getAIProvider() {
-    return jStartAISession?.provider || jStartAIProvider
+    return jStartAIProvider
 }
 
 function showAIOptions() {
@@ -804,7 +971,7 @@ async function startAIAnswer(question, images = []) {
         if (version !== jStartAIRequestVersion || root !== jStartRoot) return
         let session = jStartAISession
         const first = !session
-        if (first) session = createAISession(provider)
+        if (first) session = createAISession()
         const history = session.turns.filter(turn => turn.context).reverse().map(turn => turn.context)
         const turn = { question, images, context: null, view: null, button: null }
         const button = document.createElement('button')
@@ -814,7 +981,7 @@ async function startAIAnswer(question, images = []) {
         button.title = question
         button.addEventListener('click', () => selectAIQuestion(session, turn))
         turn.button = button
-        turn.view = createAnswerView(root, { provider: session.provider, question, images, history,
+        turn.view = createAnswerView(root, { provider, question, images, history,
             onFinish: context => {
                 turn.context = context
                 jStartAIBusy = false
@@ -867,7 +1034,7 @@ async function startAIAnswer(question, images = []) {
     }
 }
 
-function createAISession(provider) {
+function createAISession() {
     const view = getJStartElement('jstart-content-view')
     const inputView = getJStartElement('j-search-view')
     const oldTop = inputView.getBoundingClientRect().top
@@ -877,7 +1044,7 @@ function createAISession(provider) {
     workspace.innerHTML = '<aside class="j-ai-questions" id="j-ai-questions" aria-label="本次对话的问题" hidden></aside><div class="j-ai-answer-stage" id="j-ai-answer-stage"></div>'
     view.classList.add('j-ai-answering')
     view.append(workspace)
-    const session = { provider, turns: [], selected: null, pending: null }
+    const session = { turns: [], selected: null, pending: null }
     jStartAISession = session
     if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
         inputView.animate([{ transform: `translateY(${oldTop - inputView.getBoundingClientRect().top}px)` }, { transform: 'none' }], { duration: 220, easing: 'ease-out' })
@@ -983,14 +1150,14 @@ function refreshLogo() {
     const logo = getJStartElement('j-logo-view-logo')
     if (!logo) return
     const provider = getAIProvider()
-    logo.src = jStartSearchType === 'ai' || jStartImages.length
-        ? chrome.runtime.getURL(provider?.icon || 'icons/ai/doubao.png')
-        : SEARCH_LOGOS[jStartSearchType]
-    const button = getJStartElement('j-logo-view-button')
-    button.disabled = Boolean(jStartImages.length)
-    const label = jStartImages.length ? `附图提问 · ${provider?.name || '未配置'}` : jStartSearchType === 'ai' ? `AI 问答 · ${provider?.name || '未配置'} · 切换入口` : `${jStartSearchType} · 切换入口`
-    button.title = label
-    button.setAttribute('aria-label', label)
+    const ai = isAIEntry()
+    logo.src = ai ? chrome.runtime.getURL(provider?.icon || 'icons/ai/doubao.png') : SEARCH_LOGOS[jStartSearchType]
+    const name = ai ? provider?.name || '未配置' : ENGINE_NAMES[jStartSearchType]
+    const label = jStartImages.length ? `附图提问 · ${name}` : `${ai ? 'AI 问答' : '搜索'} · ${name}`
+    const switchHint = jStartImages.length ? '' : '点击或按 Tab 切换搜索和 AI，'
+    // 不设 title：悬停会弹出二级选项，系统提示框会挡住它。
+    getJStartElement('j-logo-view-button').setAttribute('aria-label',
+        `${label}。${switchHint}Shift + Tab 切换${ai ? '大模型' : '搜索引擎'}`)
 }
 
 function revealAfterStyleLoaded() {
@@ -1107,8 +1274,10 @@ function runJStartKeyAction(event) {
         return true
     }
     if (event.key === 'Tab') {
-        if (jStartImages.length) return false
-        changeSearchType()
+        // Tab 切换搜索和 AI，Shift + Tab 切换当前模式下的搜索引擎或大模型。
+        // 有图片时 Tab 不切换，但仍拦下，避免焦点跳出输入框。
+        if (event.shiftKey) cycleEntryOption()
+        else toggleEntryMode()
         return true
     }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -1184,9 +1353,12 @@ function getstr() {
                   <span class="j-parameter-error" id="j-parameter-error" role="status" hidden>请检查首行网址，参数行使用 名称=值 格式</span>
               </div>
               <div class="j-logo-view">
-                  <button class="j-logo-view-div" id="j-logo-view-button" aria-label="切换入口" type="button">
-                      <img class="j-logo-view-div-img" id="j-logo-view-logo" src="${SEARCH_LOGOS.google}" alt="">
-                  </button>
+                  <div class="j-entry" id="j-entry">
+                      <button class="j-logo-view-div" id="j-logo-view-button" aria-label="切换入口" type="button">
+                          <img class="j-logo-view-div-img" id="j-logo-view-logo" src="${SEARCH_LOGOS.google}" alt="">
+                      </button>
+                      <div class="j-entry-menu" id="j-entry-menu" role="menu" aria-label="切换搜索引擎或大模型"></div>
+                  </div>
                   <div class="j-parameter-controls" id="j-parameter-controls" hidden>
                       <button class="j-parameter-mode-button" id="j-parameter-mode-button" type="button" aria-label="切换网址参数模式" aria-pressed="false" title="逐行编辑网址参数">P</button>
                   </div>

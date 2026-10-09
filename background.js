@@ -9,6 +9,8 @@ const STORAGE_KEYS = {
     ignoredBookmarkFolderIds: 'jStartIgnoredBookmarkFolderIds'
 }
 
+const MAX_USAGE_ENTRIES = 1000
+
 const BUILTIN_COMMANDS = [
     {
         key: 'b',
@@ -44,7 +46,8 @@ const MESSAGE_HANDLERS = {
     google: request => requestSearch(request.searchWord, 'google'),
     bing: request => requestSearch(request.searchWord, 'bing'),
     'jstart:searchLocal': request => searchLocal(request.text || ''),
-    'jstart:executeResult': request => executeResult(request.result, request.newTab),
+    'jstart:executeResult': (request, sender) => executeResult(request.result, request.newTab,
+        request.closeSourceTab ? sender.tab?.id : null),
     'jstart:getCommands': async () => ({ commands: await getCustomCommands() }),
     'jstart:saveCommands': async request => {
         await saveCustomCommands(request.commands || [])
@@ -81,7 +84,7 @@ chrome.action.onClicked.addListener(() => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (!Object.hasOwn(MESSAGE_HANDLERS, request?.type)) return false
     Promise.resolve()
-        .then(() => MESSAGE_HANDLERS[request.type](request))
+        .then(() => MESSAGE_HANDLERS[request.type](request, sender))
         .then(sendResponse)
         .catch(error => sendResponse({ ok: false, error: `${error}` }))
     return true
@@ -381,10 +384,11 @@ async function findCommand(commandKey) {
     return null
 }
 
-async function executeResult(result, newTab) {
+async function executeResult(result, newTab, sourceTabId = null) {
     if (!result || !result.action) return { ok: false }
 
-    if (result.type !== 'url') await recordUsage(result.usageKey || result.id)
+    // 统计不影响打开结果，不必等写完。
+    if (result.type !== 'url') recordUsage(result.usageKey || result.id).catch(() => {})
     const action = result.action
 
     if (action.kind === 'open_url') {
@@ -404,6 +408,8 @@ async function executeResult(result, newTab) {
         } else {
             await chrome.tabs.update(action.tabId, { active: true })
             await chrome.windows.update(action.windowId, { focused: true })
+            // 从新标签页切到已打开的 Tab 后关掉新标签页，避免它带着背景动画留在后台。
+            if (sourceTabId && sourceTabId !== action.tabId) await chrome.tabs.remove(sourceTabId).catch(() => {})
         }
         return { ok: true }
     }
@@ -443,11 +449,13 @@ async function toShowJstartPage(windowId, alwaysShow = false) {
     if (!tab || !tab.id) return
     const message = { type: 'jstart', data: alwaysShow ? 'focusStartPage' : 'showStartPage' }
 
+    // 网页不预先加载 content.js：已唤起过的页面直接发消息，第一次唤起时先注入。
     try {
         await chrome.tabs.sendMessage(tab.id, message)
     } catch {
         try {
-            await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] })
+            // 页面还在加载时也立即注入，不等加载完成。
+            await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'], injectImmediately: true })
             await chrome.tabs.sendMessage(tab.id, message)
         } catch {
             // 无法注入的页面在新标签页打开，保留当前页面。
@@ -586,6 +594,13 @@ async function recordUsage(key) {
     usageStats[key] = {
         count: item.count + 1,
         lastUsedAt: Date.now()
+    }
+    // 只保留最近用过的记录，避免统计无限增长。
+    const keys = Object.keys(usageStats)
+    if (keys.length > MAX_USAGE_ENTRIES) {
+        keys.sort((a, b) => usageStats[b].lastUsedAt - usageStats[a].lastUsedAt)
+            .slice(MAX_USAGE_ENTRIES)
+            .forEach(oldKey => delete usageStats[oldKey])
     }
     await chrome.storage.local.set({ [STORAGE_KEYS.usageStats]: usageStats })
 }

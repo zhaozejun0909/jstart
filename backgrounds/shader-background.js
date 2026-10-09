@@ -15,6 +15,7 @@ export function createShaderBackground(container, options) {
     const gl = canvas.getContext('webgl2', {
         alpha: Boolean(options.alpha),
         antialias: false,
+        depth: false,
         premultipliedAlpha: false,
         powerPreference: 'low-power'
     })
@@ -103,6 +104,8 @@ export function createShaderBackground(container, options) {
             window.removeEventListener('resize', resize)
             if (pointer) window.removeEventListener('pointermove', trackPointer)
             gl.deleteProgram(program)
+            // 立即归还 WebGL 上下文，不等垃圾回收。
+            gl.getExtension('WEBGL_lose_context')?.loseContext()
             canvas.remove()
         }
     }

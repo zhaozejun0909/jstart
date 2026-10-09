@@ -21,7 +21,17 @@ function load(file, globals) {
 
 function content(reply = async () => ({ results: [] })) {
     const messages = []
+    // 延迟回调由测试手动触发，便于检查语义识别的等待逻辑。
+    const timers = new Map()
+    let timerId = 0
+    const flushTimers = () => {
+        const callbacks = [...timers.values()]
+        timers.clear()
+        callbacks.forEach(callback => callback())
+    }
     const context = load('content.js', {
+        setTimeout: callback => { timers.set(++timerId, callback); return timerId },
+        clearTimeout: id => timers.delete(id),
         document: { getElementsByTagName: () => [] },
         chrome: { runtime: {
             onMessage: event,
@@ -40,7 +50,7 @@ function content(reply = async () => ({ results: [] })) {
         removeSuggest = () => {}
         executeSuggestResult = (result, newTab) => { executed = { result, newTab } }
     `, context)
-    return { context, messages }
+    return { context, messages, flushTimers }
 }
 
 test('识别协议、域名、本地服务和带空格的文件路径', () => {
@@ -145,7 +155,8 @@ test('自动注入与补注入共用一个实例，保留对话且图标仍能�
     instance.setSession(session)
     vm.runInContext(source, context)
     assert.equal(messages.size, 1)
-    assert.equal(storageListeners.size, 1)
+    // storage 监听只在面板打开时注册，加载脚本本身不注册。
+    assert.equal(storageListeners.size, 0)
     assert.equal(context.testInstance, instance)
     assert.equal(instance.getSession(), session)
     assert.equal(panel, firstPanel)
@@ -163,7 +174,7 @@ test('自动注入与补注入共用一个实例，保留对话且图标仍能�
     const orphan = panel
     vm.runInContext(source, context)
     assert.equal(messages.size, 1)
-    assert.equal(storageListeners.size, 1)
+    assert.equal(storageListeners.size, 0)
     assert.notEqual(context.testInstance, instance)
     send('showStartPage')
     assert.equal(orphan.isConnected, false)
@@ -279,10 +290,10 @@ test('旧页面缺少接收脚本时先补注入，再发送相同唤起消息',
             calls.push(['message', tabId, message.data])
             if (++attempts === 1) throw new Error('没有接收脚本')
         },
-        executeScript: async options => calls.push(['inject', options.target.tabId, ...options.files])
+        executeScript: async options => calls.push(['inject', options.target.tabId, ...options.files, options.injectImmediately])
     })
     await context.toShowJstartPage(7, true)
-    assert.deepEqual(calls, [['message', 42, 'focusStartPage'], ['inject', 42, 'content.js'], ['message', 42, 'focusStartPage']])
+    assert.deepEqual(calls, [['message', 42, 'focusStartPage'], ['inject', 42, 'content.js', true], ['message', 42, 'focusStartPage']])
     assert.equal(created.length, 0)
 })
 
@@ -341,7 +352,7 @@ test('普通搜索及命令仍然走原路径，旧异步结果不会覆盖网�
 
 test('AI 推荐到达后仍让本地结果优先', async () => {
     let finishClassification
-    const { context } = content(message => {
+    const { context, flushTimers } = content(message => {
         if (message.type === 'jstart:classifyAI') return new Promise(resolve => { finishClassification = resolve })
         if (message.type === 'jstart:searchLocal') return Promise.resolve({ results: [{ id: 'local:1', type: 'bookmark', title: '本地结果' }] })
         return Promise.resolve({ results: [] })
@@ -349,6 +360,7 @@ test('AI 推荐到达后仍让本地结果优先', async () => {
     vm.runInContext("jStartAIProvider = { name: '豆包', icon: 'icons/ai/doubao.png', semanticEnabled: true }", context)
     context.input = '如何整理书签'
     context.onInputChange()
+    flushTimers()
     await vm.runInContext('jStartLocalRequest', context)
     assert.equal(context.getSuggestSelected().type, 'bookmark')
     finishClassification({ route: 'ai' })
@@ -372,9 +384,103 @@ test('选中 AI 联想后切换并记住 AI 模式', () => {
         startAIAnswer = question => { askedQuestion = question }
     `, context)
     context.executeSuggestResult({ type: 'ai' }, false)
-    assert.equal(vm.runInContext('jStartSearchType', context), 'ai')
+    // 只切换一级模式，原来的搜索引擎保持不变。
+    assert.equal(vm.runInContext('jStartMode', context), 'ai')
+    assert.equal(vm.runInContext('jStartSearchType', context), 'google')
     assert.equal(context.askedQuestion, '解释这个概念')
-    assert.equal(saved[0].jStartSearchType, 'ai')
+    assert.deepEqual(JSON.parse(JSON.stringify(saved)), [{ jStartMode: 'ai' }])
+})
+
+test('读取入口设置时兼容旧版本：旧的 AI 迁移为一级模式，搜索引擎保持有效值', () => {
+    const { context } = content()
+    for (const [stored, mode, engine] of [
+        [{}, 'search', 'google'],
+        [{ jStartSearchType: 'baidu' }, 'search', 'baidu'],
+        [{ jStartSearchType: 'ai' }, 'ai', 'google'],
+        // 迁移后切回搜索，旧字段仍是 ai，也不能再被当成 AI 模式。
+        [{ jStartSearchType: 'ai', jStartMode: 'search' }, 'search', 'google'],
+        [{ jStartMode: 'ai', jStartSearchType: 'bing' }, 'ai', 'bing'],
+        [{ jStartMode: 'x', jStartSearchType: 'x' }, 'search', 'google']
+    ]) {
+        context.applyEntrySettings(stored)
+        assert.deepEqual([vm.runInContext('jStartMode', context), vm.runInContext('jStartSearchType', context)], [mode, engine], JSON.stringify(stored))
+    }
+})
+
+function entryContext(providers) {
+    const { context, messages } = content()
+    const saved = []
+    context.chrome.runtime.getURL = path => `ext://${path}`
+    context.chrome.storage = { local: { set: value => saved.push(value) } }
+    context.providers = providers
+    vm.runInContext("jStartAIProvider = { ...providers[0], semanticEnabled: true, providers }", context)
+    const state = () => JSON.parse(JSON.stringify(vm.runInContext('[jStartMode, jStartSearchType, jStartAIProvider.id]', context)))
+    const press = shiftKey => assert.equal(context.runJStartKeyAction({ key: 'Tab', shiftKey }), true)
+    return { context, messages, saved, state, press }
+}
+
+const ENTRY_PROVIDERS = [
+    { id: 'doubao', name: '豆包', icon: 'icons/ai/doubao.png', model: 'doubao-model', configured: true },
+    { id: 'deepseek', name: 'DeepSeek', icon: 'icons/ai/deepseek.svg', model: 'deepseek-model', configured: false },
+    { id: 'mimo', name: 'MiMo', icon: 'icons/ai/mimo.jpg', model: 'mimo-model', configured: true }
+]
+
+test('Tab 只在搜索和 AI 间切换并保留二级选项，Shift + Tab 只切换当前模式的二级选项', () => {
+    const { context, saved, state, press } = entryContext(ENTRY_PROVIDERS)
+    for (const engine of ['baidu', 'bing', 'google']) {
+        press(true)
+        assert.deepEqual(state(), ['search', engine, 'doubao'])
+    }
+    press(false)
+    assert.deepEqual(state(), ['ai', 'google', 'doubao'])
+    // 未配置 Key 的 DeepSeek 被跳过。
+    press(true)
+    assert.deepEqual(state(), ['ai', 'google', 'mimo'])
+    press(true)
+    assert.deepEqual(state(), ['ai', 'google', 'doubao'])
+    press(false)
+    assert.deepEqual(state(), ['search', 'google', 'doubao'])
+    assert.deepEqual(JSON.parse(JSON.stringify(saved)), [
+        { jStartSearchType: 'baidu' }, { jStartSearchType: 'bing' }, { jStartSearchType: 'google' },
+        { jStartMode: 'ai' }, { jStartAIProvider: 'mimo' }, { jStartAIProvider: 'doubao' }, { jStartMode: 'search' }
+    ])
+
+    // 有图片时只能问 AI：Tab 不切换但仍拦下，Shift + Tab 切换大模型。
+    vm.runInContext("jStartImages = ['data:image/png;base64,AAAA']", context)
+    press(false)
+    assert.deepEqual(state(), ['search', 'google', 'doubao'])
+    press(true)
+    assert.deepEqual(state(), ['search', 'google', 'mimo'])
+})
+
+test('二级选项列出全部大模型，未配置的去设置页，选中后保留语义识别等信息', () => {
+    const { context, messages, state } = entryContext(ENTRY_PROVIDERS)
+    vm.runInContext("jStartMode = 'ai'", context)
+    assert.deepEqual(JSON.parse(JSON.stringify(context.getEntryOptions())).map(option => [option.id, option.available, option.active]),
+        [['doubao', true, true], ['deepseek', false, false], ['mimo', true, false]])
+    context.selectEntryOption('deepseek')
+    assert.equal(messages.at(-1).type, 'jstart:aiOptions')
+    assert.deepEqual(state(), ['ai', 'google', 'doubao'])
+    context.selectEntryOption('mimo')
+    assert.deepEqual(state(), ['ai', 'google', 'mimo'])
+    assert.equal(vm.runInContext('jStartAIProvider.model', context), 'mimo-model')
+    assert.equal(vm.runInContext('jStartAIProvider.semanticEnabled', context), true)
+
+    // 一个模型都没配置时，Shift + Tab 打开设置页。
+    const none = entryContext(ENTRY_PROVIDERS.map(item => ({ ...item, configured: false })))
+    vm.runInContext("jStartMode = 'ai'", none.context)
+    none.press(true)
+    assert.equal(none.messages.at(-1).type, 'jstart:aiOptions')
+})
+
+test('本页切换模型后收到自己的 storage 变化不重新加载，其他变化照常加载', () => {
+    const { context, messages } = entryContext(ENTRY_PROVIDERS)
+    const loads = () => messages.filter(message => message.type === 'jstart:aiProvider').length
+    context.handleStorageChange({ jStartAIProvider: { newValue: 'doubao' } }, 'local')
+    assert.equal(loads(), 0)
+    context.handleStorageChange({ jStartAIProvider: { newValue: 'mimo' } }, 'local')
+    context.handleStorageChange({ jStartAISettings: { newValue: {} } }, 'local')
+    assert.equal(loads(), 2)
 })
 
 test('文件权限未开启时提示；开启后支持当前页和新标签页', async () => {
@@ -418,16 +524,20 @@ test('已有 AI 对话时搜索在新标签页打开并保留对话', async () =
 
 test('相同输入切换引擎复用语义请求和结果，关闭输入框后重新判断', async () => {
     let finishClassification
-    const { context, messages } = content(message => message.type === 'jstart:classifyAI'
+    const { context, messages, flushTimers } = content(message => message.type === 'jstart:classifyAI'
         ? new Promise(resolve => { finishClassification = resolve })
         : Promise.resolve({ results: [] }))
     vm.runInContext('jStartAIProvider = { semanticEnabled: true }', context)
     context.input = '解释浏览器缓存的工作原理'
-    for (const engine of ['google', 'baidu', 'bing']) {
+    const requestCount = () => messages.filter(message => message.type === 'jstart:classifyAI').length
+    context.onInputChange()
+    flushTimers()
+    assert.equal(requestCount(), 1)
+    // 已发出判断的文字，切换引擎时直接复用，不再等待。
+    for (const engine of ['baidu', 'bing', 'google']) {
         vm.runInContext(`jStartSearchType = '${engine}'`, context)
         context.onInputChange()
     }
-    const requestCount = () => messages.filter(message => message.type === 'jstart:classifyAI').length
     assert.equal(requestCount(), 1)
     finishClassification({ route: 'ai' })
     await new Promise(setImmediate)
@@ -438,12 +548,43 @@ test('相同输入切换引擎复用语义请求和结果，关闭输入框后�
     assert.equal(context.getSuggestSelected().type, 'ai')
 
     context.window = { removeEventListener() {} }
+    context.chrome.storage = { onChanged: { removeListener() {} } }
     vm.runInContext('removePageShortcutBlockers = () => {}', context)
     context.removeHTML()
     context.onInputChange()
+    flushTimers()
     assert.equal(requestCount(), 2)
     finishClassification({ route: 'search' })
     await new Promise(setImmediate)
+})
+
+test('连续输入时只对停顿后的最终文字做语义识别', () => {
+    const { context, messages, flushTimers } = content()
+    vm.runInContext('jStartAIProvider = { semanticEnabled: true }', context)
+    const routeTexts = () => messages.filter(message => message.type === 'jstart:classifyAI').map(message => message.text)
+    for (const input of ['如何', '如何清理', '如何清理浏览器缓存']) {
+        context.input = input
+        context.onInputChange()
+    }
+    assert.deepEqual(routeTexts(), [])
+    flushTimers()
+    assert.deepEqual(routeTexts(), ['如何清理浏览器缓存'])
+
+    // 计时结束时输入已改变，但防抖还没触发 onInputChange：不发送旧文字。
+    context.input = '解释浏览器缓存'
+    context.onInputChange()
+    context.input = '解释浏览器缓存怎么清理'
+    flushTimers()
+    assert.deepEqual(routeTexts(), ['如何清理浏览器缓存'])
+
+    // 不超过 3 个字（去掉首尾空格后）不做语义识别，联想请求照常发出。
+    for (const input of ['翻译', 'vue', ' 天气 ']) {
+        context.input = input
+        context.onInputChange()
+        flushTimers()
+        assert.equal(messages.at(-1).searchWord, input)
+    }
+    assert.deepEqual(routeTexts(), ['如何清理浏览器缓存'])
 })
 
 test('语义识别通信失败允许重试，配置变化后不复用旧结果', async () => {
@@ -644,6 +785,65 @@ test('统一消息分发保留结果格式和参数，忽略 AI 及未知消息'
         assert.equal(responses[0].ok, false)
         assert.match(responses[0].error, /失败/)
     }
+})
+
+test('从新标签页切到已打开的 Tab 后关闭来源页，新 Tab 打开或未要求时保留', async () => {
+    const calls = []
+    let listener
+    load('background.js', { chrome: {
+        commands: { onCommand: event }, action: { onClicked: event },
+        runtime: { onMessage: { addListener(value) { listener = value } } },
+        storage: { local: { get: async () => ({}), set: async () => {} } },
+        tabs: {
+            update: async id => calls.push(['activate', id]),
+            create: async options => calls.push(['create', options.url]),
+            remove: async id => calls.push(['close', id])
+        },
+        windows: { update: async () => {} }
+    } })
+    const result = { id: 'tab:5', type: 'tab', action: { kind: 'activate_tab', tabId: 5, windowId: 1, url: 'https://example.com/' } }
+    const send = message => new Promise(resolve => {
+        listener({ type: 'jstart:executeResult', result, ...message }, { tab: { id: 9 } }, resolve)
+    })
+    await send({ closeSourceTab: true })
+    await send({ closeSourceTab: false })
+    await send({ closeSourceTab: true, newTab: true })
+    assert.deepEqual(calls, [['activate', 5], ['close', 9], ['activate', 5], ['create', 'https://example.com/']])
+})
+
+test('只有新标签页且没有 AI 对话时，才请求切换后关闭来源页', () => {
+    const messages = []
+    const context = load('content.js', {
+        document: { getElementsByTagName: () => [] },
+        chrome: { runtime: { onMessage: event, sendMessage: (...args) => {
+            messages.push(args.at(-1))
+            return new Promise(() => {})
+        } } }
+    })
+    const result = { id: 'tab:5', type: 'tab', action: { kind: 'activate_tab', tabId: 5 } }
+    for (const [newTabPage, session, expected] of [[true, null, true], [true, { turns: [] }, false], [false, null, false]]) {
+        context.flags = { newTabPage, session }
+        vm.runInContext('jStarttabStart = flags.newTabPage; jStartAISession = flags.session', context)
+        context.executeSuggestResult(result, false)
+        assert.equal(messages.at(-1).closeSourceTab, expected)
+    }
+})
+
+test('使用统计超过上限时只保留最近用过的记录', async () => {
+    const usageStats = Object.fromEntries(Array.from({ length: 1000 }, (_, index) => [`bookmark:${index}`, { count: 1, lastUsedAt: index + 1 }]))
+    let saved
+    const context = load('background.js', { chrome: {
+        commands: { onCommand: event }, action: { onClicked: event }, runtime: { onMessage: event },
+        storage: { local: {
+            get: async () => ({ jStartUsageStats: usageStats }),
+            set: async value => { saved = value.jStartUsageStats }
+        } }
+    } })
+    await context.recordUsage('bookmark:new')
+    assert.equal(Object.keys(saved).length, 1000)
+    assert.equal(saved['bookmark:0'], undefined)
+    assert.equal(saved['bookmark:999'].count, 1)
+    assert.equal(saved['bookmark:new'].count, 1)
 })
 
 test('命令目标网址由后台生成，前台显示与实际打开的网址一致', async () => {

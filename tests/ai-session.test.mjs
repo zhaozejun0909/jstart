@@ -27,7 +27,32 @@ test('原 MiMo Key 可用于新增问答模型，语义识别改用 DeepSeek Key
     assert.equal(provider.semanticEnabled, true)
     assert.equal(provider.prompt, undefined)
     assert.equal(provider.key, undefined)
+    // 输入框切换用的模型列表只带是否已配置，不带 Key 和提示词。
+    assert.deepEqual(provider.providers.map(item => [item.id, item.configured]), [['doubao', false], ['deepseek', true], ['mimo', true]])
+    assert.equal(provider.providers.some(item => 'key' in item || 'prompt' in item), false)
+
+    // 选中的 MiMo 没有 Key 时，改用第一个已配置的模型。
+    storedSettings = { providers: { deepseek: { key: 'deepseek-key' } } }
+    const fallback = await new Promise(resolve => onMessage({ type: 'jstart:aiProvider' }, null, resolve))
+    assert.equal(fallback.id, 'deepseek')
+    assert.equal(fallback.configured, true)
     storedSettings = { providers: { doubao: { key: 'test-key' } } }
+})
+
+test('对话中途换模型：豆包的历史给其他模型用文字回答，其他模型的历史给豆包补成回答条目', () => {
+    const fromDoubao = [{ question: '第一问', images: [], answer: '豆包的回答', output: [
+        { type: 'reasoning', encrypted_content: 'encrypted-payload' },
+        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '豆包的回答' }] }
+    ] }]
+    const chat = JSON.parse(buildAIRequest('deepseek', { key: 'test-key', prompt: '提示词' }, '第二问', [], fromDoubao).body)
+    assert.deepEqual(chat.messages[2], { role: 'assistant', content: '豆包的回答' })
+    assert.equal(JSON.stringify(chat).includes('encrypted-payload'), false)
+
+    const fromChat = [{ question: '第一问', images: ['data:image/png;base64,AAAA'], answer: 'DeepSeek 的回答' }]
+    const doubao = JSON.parse(buildAIRequest('doubao', { key: 'test-key', prompt: '提示词' }, '第二问', [], fromChat).body)
+    assert.equal(doubao.input[0].content[1].image_url, fromChat[0].images[0])
+    assert.deepEqual(doubao.input[1], { role: 'assistant', content: [{ type: 'output_text', text: 'DeepSeek 的回答' }] })
+    assert.equal(doubao.input[2].content[0].text, '第二问')
 })
 
 test('DeepSeek 按顺序回传本次会话的问答和图片', () => {
@@ -111,6 +136,7 @@ test('豆包流式结果保留可回传的输出条目，不把联网调用塞�
     await listeners.message({ type: 'ask', provider: 'doubao', question: '提问', images: [], history: [] })
     assert.equal(events.find(event => event.type === 'text').text, '回答')
     assert.deepEqual(events.find(event => event.type === 'context').context.output, [output[0], output[2]])
+    assert.equal(events.find(event => event.type === 'context').context.answer, '回答')
     assert.equal(events.at(-1).type, 'done')
 })
 

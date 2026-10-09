@@ -2,9 +2,13 @@ import { AI_PROVIDERS, loadAISettings } from './ai-settings.js'
 
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (message.type === 'jstart:aiProvider') {
-        loadSelectedAIProvider().then(({ id, provider, config, semanticEnabled }) => respond({
+        loadSelectedAIProvider().then(({ id, provider, config, semanticEnabled, settings }) => respond({
             id, name: provider.name, icon: provider.icon, model: provider.model,
-            configured: Boolean(config.key), semanticEnabled
+            configured: Boolean(config.key), semanticEnabled,
+            // 供输入框切换大模型，只告知是否已配置，不发送 Key。
+            providers: Object.entries(AI_PROVIDERS).map(([id, item]) => ({
+                id, name: item.name, icon: item.icon, model: item.model, configured: Boolean(settings.providers[id].key)
+            }))
         }))
         return true
     }
@@ -23,8 +27,12 @@ async function loadSelectedAIProvider() {
     const [settings, saved] = await Promise.all([
         loadAISettings(), chrome.storage.local.get('jStartAIProvider')
     ])
-    const id = AI_PROVIDERS[saved.jStartAIProvider] ? saved.jStartAIProvider : 'doubao'
-    return { id, provider: AI_PROVIDERS[id], config: settings.providers[id],
+    const selected = AI_PROVIDERS[saved.jStartAIProvider] ? saved.jStartAIProvider : 'doubao'
+    // 选中的模型没填 Key 时改用第一个已配置的模型，免得在设置页填完 Key 还要再去切换。
+    const id = settings.providers[selected].key
+        ? selected
+        : Object.keys(AI_PROVIDERS).find(item => settings.providers[item].key) || selected
+    return { id, provider: AI_PROVIDERS[id], config: settings.providers[id], settings,
         semanticEnabled: Boolean(settings.semanticEnabled && settings.providers.deepseek.key) }
 }
 
@@ -143,7 +151,9 @@ export function buildAIRequest(id, config, question, images = [], history = []) 
     } else {
         const input = []
         for (const turn of history) {
-            input.push(doubaoUserContent(turn.question, turn.images), ...turn.output)
+            // 其他模型答的轮次没有豆包的输出条目，用文字回答代替。
+            const output = turn.output || [{ role: 'assistant', content: [{ type: 'output_text', text: turn.answer }] }]
+            input.push(doubaoUserContent(turn.question, turn.images), ...output)
         }
         input.push(doubaoUserContent(question, images))
         Object.assign(body, { instructions: config.prompt, input, store: false })
@@ -251,7 +261,8 @@ async function streamAnswer(id, config, question, images, history, signal, send)
     if (!contextOutput.some(item => item.type === 'message')) {
         contextOutput.push({ role: 'assistant', content: [{ type: 'output_text', text: answer }] })
     }
-    return { question, images, output: contextOutput }
+    // 同时保留文字回答，对话中途换成其他模型时也能带上这一轮。
+    return { question, images, answer, output: contextOutput }
 }
 
 // A network chunk can split both UTF-8 characters and SSE events.
